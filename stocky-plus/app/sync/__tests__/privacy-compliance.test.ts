@@ -611,18 +611,19 @@ describe("privacy compliance", () => {
     await uninstall(SHOP_A);
     await uninstall(SHOP_B);
     const now = new Date();
+    const expiredUninstalledAt = new Date(now.getTime() - 29 * DAY_MS);
     await prisma.shop.update({
       where: { id: expired },
-      data: { uninstalledAt: new Date(now.getTime() - 31 * DAY_MS) },
+      data: { uninstalledAt: expiredUninstalledAt },
     });
     await prisma.shop.update({
       where: { id: recent },
-      data: { uninstalledAt: new Date(now.getTime() - 29 * DAY_MS) },
+      data: { uninstalledAt: new Date(now.getTime() - 27 * DAY_MS) },
     });
     const recentBefore = await rowsByTable(recent);
 
     const summary = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       now,
       deps: realDeps,
     });
@@ -639,6 +640,10 @@ describe("privacy compliance", () => {
       resolution: "SHOP_DATA_ERASED",
       shopifyWebhookId: null,
     });
+    // Shopify's 30 days count from the uninstall, not from the sweep.
+    expect(request.dueAt.getTime()).toBe(
+      expiredUninstalledAt.getTime() + 30 * DAY_MS,
+    );
 
     const kept = await prisma.shop.findUniqueOrThrow({ where: { id: recent } });
     expect(kept.processingDisabledReason).toBe("UNINSTALLED");

@@ -8,12 +8,14 @@ import {
   formatMoneyAmount,
   toDecimal,
 } from "../analytics/money";
+import type { OrderHistoryStatus } from "../../sync/sync-status.server";
 import type { ReportViewRequest } from "./params";
 import type {
   CellValue,
   ColumnKind,
   ReportColumn,
   ReportData,
+  ReportNotice,
   ReportSort,
   ReportTile,
 } from "./types";
@@ -180,6 +182,36 @@ export function freshnessNote(
   return dataAsOf
     ? `Includes Shopify changes up to ${formatShopInstant(dataAsOf, timeZone)}.`
     : "No Shopify data has been synced for this report yet.";
+}
+
+/**
+ * Sales reports read the imported order history. While it is arriving, or was
+ * never requested, the figures are real but incomplete, and a merchant must
+ * not mistake them for the whole picture.
+ */
+export function orderHistoryNotices(
+  status: OrderHistoryStatus,
+): ReportNotice[] {
+  switch (status) {
+    case "ready":
+      return [];
+    case "importing":
+      return [
+        {
+          tone: "warning",
+          heading: "Your order history is still being imported",
+          body: "These figures only include the orders imported so far, so they will rise as the import finishes. Check back in a little while.",
+        },
+      ];
+    case "not_started":
+      return [
+        {
+          tone: "warning",
+          heading: "Your order history has not been imported",
+          body: "These figures cannot include your past orders yet. Start a sync from the home page; the import runs in the background.",
+        },
+      ];
+  }
 }
 
 /** A fraction (0–1) as a percentage with two decimals, without the sign. */

@@ -133,6 +133,12 @@ function readScanQuantity(field: FormDataEntryValue | null): number | null {
 
 const SCAN_QUANTITY_MESSAGE = `Enter the units as a whole number from 1 to ${QUANTITY_LIMIT}.`;
 
+/** A pasted list of items to put back in its field, unless it is too long to be one. */
+const keptItems = (items: FormDataEntryValue | null) =>
+  typeof items === "string" && items.length <= MAX_TRANSFER_ITEM_TEXT_LENGTH
+    ? items
+    : undefined;
+
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const { admin, db, actor } = await requireAdminTenantWithActor({
     request,
@@ -143,6 +149,17 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (!transferId) return { error: NOT_FOUND };
   const form = await request.formData();
   const intent = form.get("intent");
+  if (!actor) {
+    // Refused like any other failed step of the page: the scan field takes
+    // the next code and a pasted list is not lost.
+    return {
+      error: STAFF_REQUIRED_MESSAGE,
+      ...(intent === "addItem" || intent === "scan"
+        ? { scannedAt: Date.now() }
+        : {}),
+      ...(intent === "addItems" ? { items: keptItems(form.get("items")) } : {}),
+    };
+  }
 
   if (intent === "addItem") {
     const scannedAt = Date.now();
@@ -187,11 +204,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         error: result.error,
         details: result.details,
         // What was pasted is handed back so the lines named can be fixed.
-        items:
-          typeof itemsText === "string" &&
-          itemsText.length <= MAX_TRANSFER_ITEM_TEXT_LENGTH
-            ? itemsText
-            : undefined,
+        items: keptItems(itemsText),
       };
     }
     const raised =
@@ -252,7 +265,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "ship") {
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
     const result = await shipTransfer(db, admin, actor, transferId, {
       allowShortSource: form.get("allowShortSource") === "1",
     });
@@ -355,7 +367,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "postReceipt" || intent === "receiveAll") {
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
     const result = await (intent === "receiveAll"
       ? receiveTransfer(db, admin, actor, transferId)
       : postTransferReceipt(db, admin, actor, transferId));
@@ -380,7 +391,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "close") {
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
     const result = await closeTransfer(db, admin, actor, transferId, {
       resolution: form.get("resolution"),
     });

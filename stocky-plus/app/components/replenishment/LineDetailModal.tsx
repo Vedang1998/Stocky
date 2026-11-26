@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
-import { formatDecimal, formatMoney, MISSING_VALUE } from "../../lib/decimal-format";
+import { formatDecimal, MISSING_VALUE } from "../../lib/decimal-format";
 import { MAX_LEAD_TIME_DAYS } from "../../lib/replenishment/form";
 import type { VariantRuleValues } from "../../lib/replenishment/rules.server";
 import { SHOP_SCOPE } from "../../lib/replenishment/scope";
@@ -16,7 +16,7 @@ import {
 import {
   ABC_CLASS_DESCRIPTIONS,
   formatLocalDate,
-  marginAndMarkup,
+  lineMargin,
   revenuePerDay,
   STOCK_STATUS_LABELS,
 } from "../../lib/replenishment/worksheet/describe";
@@ -30,6 +30,7 @@ import type {
   PreviewFormValues,
   WorksheetActionResult,
 } from "./types";
+import { money, percent, quantity } from "./format";
 
 /** What the detail needs to know about the worksheet the row belongs to. */
 export type LineDetailContext = {
@@ -44,20 +45,6 @@ export type LineDetailContext = {
   /** The stock the worksheet plans: all locations together, or one location. */
   scope: { key: string; name: string };
 };
-
-function quantity(value: number | null): string {
-  return value == null ? MISSING_VALUE : value.toLocaleString("en-US");
-}
-
-function money(amount: string | null, currencyCode: string | null, digits?: number): string {
-  if (amount == null) return MISSING_VALUE;
-  if (!currencyCode) return formatDecimal(amount);
-  return formatMoney(amount, currencyCode, { maximumFractionDigits: digits });
-}
-
-function percent(value: string | null): string {
-  return value == null ? MISSING_VALUE : `${formatDecimal(value)}%`;
-}
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -324,15 +311,7 @@ function LineDetail({
   previewDefaults: PreviewFormValues | null;
 }) {
   const { detail } = line;
-  const cost = line.supplierCostAmount ?? line.unitCostAmount;
-  const costCurrency = line.supplierCostAmount
-    ? line.supplierCostCurrencyCode
-    : line.unitCostCurrencyCode;
-  // Margin only means something when price and cost are in the same currency.
-  const comparable = cost != null && costCurrency === line.priceCurrencyCode;
-  const { margin, markup } = comparable
-    ? marginAndMarkup(line.priceAmount, cost)
-    : { margin: null, markup: null };
+  const { margin, markup, currenciesDiffer } = lineMargin(line);
 
   return (
     <s-stack direction="block" gap="large">
@@ -442,7 +421,7 @@ function LineDetail({
           <Fact label="Margin">{percent(margin)}</Fact>
           <Fact label="Markup">{percent(markup)}</Fact>
         </Facts>
-        {cost != null && !comparable && (
+        {currenciesDiffer && (
           <s-text color="subdued">
             Margin and markup are not shown because the price and the cost are in different
             currencies.

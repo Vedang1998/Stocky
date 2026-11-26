@@ -15,7 +15,9 @@ import type {
   StocktakeLineView,
   StocktakeListEntry,
   StocktakeProgress,
+  StocktakeRecountEventView,
 } from "./stocktakes/stocktake-read.server";
+import { recountEventText } from "./stocktakes/stocktake-display";
 import type { DifferenceValue } from "./stocktakes/stocktake-value";
 import { Prisma } from "@prisma/client";
 
@@ -51,6 +53,7 @@ const {
     getStocktakeProgress: vi.fn(),
     getStocktakeLines: vi.fn(),
     getStocktakeLedgerSummary: vi.fn(),
+    getStocktakeRecountHistory: vi.fn(),
     listStocktakeLinesForExport: vi.fn(),
   },
   context: {
@@ -195,6 +198,27 @@ function get(
 const act = (fields: Record<string, string>) =>
   countRoute.action(post(`/app/stocktakes/${ID}`, fields, { id: ID }));
 
+/** Every change the count page can make, with the fields its form sends. */
+const CHANGES: Array<Record<string, string>> = [
+  { intent: "scan", code: "1111" },
+  { intent: "count", lineId: "line-1", countedQty: "7" },
+  { intent: "addItems", codes: "RED-750" },
+  { intent: "zeroFill" },
+  { intent: "clearZeroFill" },
+  { intent: "recount", lineId: "line-1" },
+  { intent: "keepCount", lineId: "line-1" },
+  { intent: "resolveMovement", lineId: "line-1", resolution: "COUNTED_AFTER" },
+  { intent: "complete" },
+  { intent: "complete", acceptUncounted: "1" },
+  { intent: "cancel" },
+];
+
+function expectNothingSaved() {
+  for (const [name, write] of Object.entries(service)) {
+    expect(write, name).not.toHaveBeenCalled();
+  }
+}
+
 const header = (extra: Partial<StocktakeHeader> = {}): StocktakeHeader => ({
   id: ID,
   name: "Cellar count",
@@ -322,6 +346,7 @@ beforeEach(() => {
     appliedChangeCount: 0,
     refusedChangeCount: 0,
   });
+  reads.getStocktakeRecountHistory.mockResolvedValue({ events: [], total: 0 });
   reads.listStocktakeLinesForExport.mockResolvedValue([line()]);
 });
 
@@ -404,6 +429,34 @@ describe("Stocktakes list", () => {
       context.db,
       context.admin,
       expect.objectContaining({ scope: "FULL", blind: false, name: "" }),
+    );
+  });
+
+  it("starts no count without a signed-in staff member, and keeps what was entered", async () => {
+    context.actor = null;
+
+    const actionData = await listRoute.action(
+      post("/app/stocktakes", {
+        intent: "create",
+        name: "Friday count",
+        locationId: CELLAR,
+        scope: "PARTIAL",
+        blind: "hide",
+      }),
+    );
+
+    expect(actionData).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      values: {
+        name: "Friday count",
+        locationId: CELLAR,
+        scope: "PARTIAL",
+        blind: "hide",
+      },
+    });
+    expect(service.createStocktake).not.toHaveBeenCalled();
+    expect(renderList({}, actionData)).toMatch(
+      /<s-text-field[^>]*name="name"[^>]*value="Friday count"/,
     );
   });
 
@@ -644,6 +697,37 @@ describe("Count page action", () => {
     expect(await act({})).toEqual({ error: "That action is not available." });
   });
 
+  it.each(CHANGES)(
+    "saves nothing for $intent without a signed-in staff member",
+    async (fields) => {
+      context.actor = null;
+
+      expect(await act(fields)).toMatchObject({
+        error: STAFF_REQUIRED_MESSAGE,
+      });
+      expectNothingSaved();
+    },
+  );
+
+  it("hands a pasted list back, and keeps the scan field ready, when no staff member is signed in", async () => {
+    context.actor = null;
+    const codes = "RED-750\nWHITE-750\nROSE-750";
+
+    expect(await act({ intent: "addItems", codes })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      codes,
+    });
+    expect(await act({ intent: "scan", code: "1111" })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      scannedAt: expect.any(Number),
+    });
+    // The other steps have nothing to hand back.
+    expect(await act({ intent: "zeroFill" })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+    });
+    expectNothingSaved();
+  });
+
   describe("scan", () => {
     it("counts one unit unless a quantity is given, and says what the count is now", async () => {
       service.recordStocktakeScan.mockResolvedValue({
@@ -731,25 +815,6 @@ describe("Count page action", () => {
         error: "No item in this shop's catalog has the barcode or SKU 0000.",
         scannedAt: expect.any(Number),
       });
-    });
-
-    it("counts without a staff identity, which only completing needs", async () => {
-      context.actor = null;
-      service.recordStocktakeScan.mockResolvedValue({
-        ok: true,
-        lineId: "line-1",
-        title: "Red wine",
-        countedQty: 1,
-        added: false,
-      });
-
-      await act({ intent: "scan", code: "1111" });
-
-      expect(service.recordStocktakeScan).toHaveBeenCalledWith(
-        context.db,
-        context.admin,
-        expect.objectContaining({ actor: null }),
-      );
     });
   });
 
@@ -846,9 +911,10 @@ describe("Count page action", () => {
         ok: true,
         notice: "Count kept. The item no longer waits for a recount.",
       });
+      // Who took the request back goes into the count's history.
       expect(service.withdrawStocktakeRecount).toHaveBeenCalledWith(
         context.db,
-        { stocktakeId: ID, lineId: "line-1" },
+        { stocktakeId: ID, lineId: "line-1", actor: STAFF },
       );
       expect(service.requestStocktakeRecount).not.toHaveBeenCalled();
     });
@@ -1049,15 +1115,6 @@ describe("Count page action", () => {
   });
 
   describe("complete", () => {
-    it("needs a signed-in staff member", async () => {
-      context.actor = null;
-
-      expect(await act({ intent: "complete" })).toEqual({
-        error: STAFF_REQUIRED_MESSAGE,
-      });
-      expect(service.completeStocktake).not.toHaveBeenCalled();
-    });
-
     it("completes as the staff member, leaving uncounted items alone only when asked", async () => {
       service.completeStocktake.mockResolvedValue({
         ok: true,
@@ -1145,8 +1202,7 @@ describe("Count page action", () => {
   });
 
   describe("cancel", () => {
-    it("cancels the count, with or without a staff identity", async () => {
-      context.actor = null;
+    it("cancels the count as the signed-in staff member", async () => {
       service.cancelStocktake.mockResolvedValue({
         ok: true,
         alreadyCancelled: false,
@@ -1158,7 +1214,7 @@ describe("Count page action", () => {
       });
       expect(service.cancelStocktake).toHaveBeenCalledWith(context.db, {
         stocktakeId: ID,
-        actor: null,
+        actor: STAFF,
       });
 
       service.cancelStocktake.mockResolvedValue({
@@ -1746,24 +1802,6 @@ describe("Stocktakes without an active plan", () => {
     }
   };
 
-  const CHANGES: Array<Record<string, string>> = [
-    { intent: "scan", code: "1111" },
-    { intent: "count", lineId: "line-1", countedQty: "7" },
-    { intent: "addItems", codes: "RED-750" },
-    { intent: "zeroFill" },
-    { intent: "clearZeroFill" },
-    { intent: "recount", lineId: "line-1" },
-    { intent: "keepCount", lineId: "line-1" },
-    {
-      intent: "resolveMovement",
-      lineId: "line-1",
-      resolution: "COUNTED_AFTER",
-    },
-    { intent: "complete" },
-    { intent: "complete", acceptUncounted: "1" },
-    { intent: "cancel" },
-  ];
-
   /** Every submit button with its label; "Find" only searches the count. */
   function submitButtons(html: string) {
     const buttons = html.match(/<s-button[^>]*type="submit"[^>]*>[^<]*/g) ?? [];
@@ -1792,9 +1830,7 @@ describe("Stocktakes without an active plan", () => {
         expect(refusal, String(index)).toBeInstanceOf(Response);
         expect((refusal as Response).status, String(index)).toBe(403);
       }
-      for (const [name, call] of Object.entries(service)) {
-        expect(call, name).not.toHaveBeenCalled();
-      }
+      expectNothingSaved();
       expect(reads.getStocktake).not.toHaveBeenCalled();
     });
   }
@@ -2350,5 +2386,128 @@ describe("Printing the count sheet from the count page", () => {
     expect(html).not.toContain("part=7");
     // The buttons give way to the list.
     expect(html).not.toMatch(/<s-button href="[^"]*count-sheet/);
+  });
+});
+
+describe("Recount history on the count page", () => {
+  const step = (
+    extra: Partial<StocktakeRecountEventView> = {},
+  ): StocktakeRecountEventView => ({
+    id: "event-1",
+    at: new Date("2026-11-13T02:30:00.000Z"),
+    kind: "REQUESTED",
+    title: "Red wine",
+    sku: "RED-750",
+    questionedQty: 12,
+    countedQty: null,
+    countSource: null,
+    byUserId: "42",
+    ...extra,
+  });
+
+  it("reads the history of the count that is open on the page", async () => {
+    const recounts = { events: [step()], total: 1 };
+    reads.getStocktakeRecountHistory.mockResolvedValue(recounts);
+
+    expect(await loadCount()).toMatchObject({ recounts });
+    expect(reads.getStocktakeRecountHistory).toHaveBeenCalledWith(
+      context.db,
+      ID,
+    );
+  });
+
+  it("has no history section on a count nobody asked to recount", async () => {
+    expect(await renderCount()).not.toContain("Recount history");
+  });
+
+  it("lists each step with its time on the shop's clock, the item, what happened and who did it", async () => {
+    shopClock.readShopTimeZone.mockResolvedValue("America/Toronto");
+    reads.getStocktakeRecountHistory.mockResolvedValue({
+      events: [
+        step({
+          id: "event-3",
+          kind: "KEPT",
+          questionedQty: 1500,
+          byUserId: null,
+          sku: null,
+          title: "White wine",
+        }),
+        step({
+          id: "event-2",
+          kind: "COUNTED",
+          countedQty: 10,
+          countSource: "MANUAL",
+          byUserId: "77",
+        }),
+        step(),
+      ],
+      total: 3,
+    });
+
+    const html = await renderCount();
+    const rows = html
+      .slice(html.indexOf('heading="Recount history"'))
+      .match(/<s-table-row>.*?<\/s-table-row>/g)
+      ?.map((row) =>
+        (row.match(/<s-table-cell>.*?<\/s-table-cell>/g) ?? []).map((cell) =>
+          cell.replace(/<[^>]+>/g, ""),
+        ),
+      );
+
+    expect(rows).toEqual([
+      [
+        "Nov 12, 2026, 9:30 PM EST",
+        "White wine",
+        "Request taken back; the count asked about was 1,500",
+        "staff not recorded",
+      ],
+      [
+        "Nov 12, 2026, 9:30 PM EST",
+        "Red wine (RED-750)",
+        "Counted again as 10; first counted as 12",
+        "staff ID 77",
+      ],
+      [
+        "Nov 12, 2026, 9:30 PM EST",
+        "Red wine (RED-750)",
+        "Recount asked for; the count was 12",
+        "staff ID 42",
+      ],
+    ]);
+    // Every step is on the page, so nothing says that some are left out.
+    expect(html).not.toMatch(/The latest/);
+  });
+
+  it("says how many steps there are when only the latest are shown", async () => {
+    reads.getStocktakeRecountHistory.mockResolvedValue({
+      events: [step(), step({ id: "event-2" })],
+      total: 1204,
+    });
+
+    const html = (await renderCount()).replace(/<!-- -->/g, "");
+
+    expect(html).toContain("The latest 2 of 1,204 steps.");
+  });
+
+  it("keeps the history on a closed count, where nothing else about a recount is offered", async () => {
+    reads.getStocktake.mockResolvedValue(header({ status: "CANCELLED" }));
+    reads.getStocktakeRecountHistory.mockResolvedValue({
+      events: [step()],
+      total: 1,
+    });
+
+    const html = await renderCount();
+
+    expect(html).toContain('heading="Recount history"');
+    expect(html).toContain("Recount asked for; the count was 12");
+    expect(page.formKeyHandlers.has("recount")).toBe(false);
+  });
+
+  it("says in words that a recount was scanned, without a count the scans did not end on", () => {
+    expect(
+      recountEventText(
+        step({ kind: "COUNTED", countSource: "SCAN", questionedQty: 7 }),
+      ),
+    ).toBe("Counted again by scanning; first counted as 7");
   });
 });
