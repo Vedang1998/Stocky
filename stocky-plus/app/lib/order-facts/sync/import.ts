@@ -20,6 +20,7 @@ import {
 } from "./apply-nominated";
 import {
   lookupApplicationReceipt,
+  OrderObservationInFlightError,
   probeReceiptBeforeShopifyIo,
 } from "./apply-composition";
 import {
@@ -37,6 +38,8 @@ import {
   ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS,
   BULK_OPERATION_GID_PREFIX,
   ORDER_FACTS_D_API_VERSION,
+  ORDER_FACTS_OBSERVATION_WAIT_REASON,
+  ORDER_FACTS_OBSERVATION_WAIT_RETRY_MS,
   ORDER_FACTS_SCRATCH_RESOURCE_REASON,
   ORDER_FACTS_SYNC_DOMAIN,
   ORDER_FACTS_SYNC_JOB_TYPE,
@@ -407,6 +410,7 @@ export async function runOrderFactsImportStep(input: {
   let ordinalAck: DiskOrdinalAck | null = null;
   let applied = 0;
   let incomplete = 0;
+  let waitingOnObservation = 0;
   let examined = 0;
   let followUpReads = 0;
   let bulkDirectApplies = 0;
@@ -683,7 +687,16 @@ export async function runOrderFactsImportStep(input: {
           contiguous: 0,
         });
       },
-      onCompleteAssembly: applyAssembly,
+      // An order a webhook job is still reading is left for the next pass;
+      // the rest of the file is imported now.
+      onCompleteAssembly: async (assembly) => {
+        try {
+          await applyAssembly(assembly);
+        } catch (error) {
+          if (!(error instanceof OrderObservationInFlightError)) throw error;
+          waitingOnObservation += 1;
+        }
+      },
     });
   } catch (error) {
     return failImport({
@@ -726,6 +739,16 @@ export async function runOrderFactsImportStep(input: {
       examined,
       incomplete,
     });
+  }
+
+  // Waiting for another job to finish with an order is not a failure: no
+  // partial-failure mark, data issue or health change, only another pass.
+  if (waitingOnObservation > 0) {
+    return {
+      status: "CONTINUE",
+      backoffMs: ORDER_FACTS_OBSERVATION_WAIT_RETRY_MS,
+      reason: ORDER_FACTS_OBSERVATION_WAIT_REASON,
+    };
   }
 
   if (bulkOperationGid) {

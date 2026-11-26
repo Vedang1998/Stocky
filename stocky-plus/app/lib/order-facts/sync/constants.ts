@@ -94,6 +94,13 @@ export const ORDER_FACTS_SCRATCH_RESOURCE_REASON =
 /** One large staging attempt may reserve remaining namespace capacity. */
 export const ORDER_FACTS_SCRATCH_SINGLE_LARGE_IMPORT_DEFAULT = true as const;
 export const ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS = 5_000;
+/**
+ * An import pass that met a webhook job's still-open read of an order comes
+ * back for that order after this delay.
+ */
+export const ORDER_FACTS_OBSERVATION_WAIT_RETRY_MS = 5_000;
+export const ORDER_FACTS_OBSERVATION_WAIT_REASON =
+  "order_observation_in_flight" as const;
 export const ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS = 600_000;
 export const ORDER_FACTS_WINDOW_PAGE_SIZE = 50;
 export const ORDER_FACTS_MAX_WINDOW_PAGES = 200;
