@@ -2,6 +2,7 @@ import type { OrderAdminReadClient, TrustedShopIdentity } from "../admin-read";
 import type { OrderApplyReceiptInput } from "../apply/types";
 import type { OrderSourceKind } from "../types";
 import {
+  ORDER_FACTS_OBSERVATION_WAIT_REASON,
   TERMINAL_TRANSACTION_STATUSES,
   isLegacyOrderWebhookTopic,
   isOrderFactsWebhookTopic,
@@ -9,6 +10,7 @@ import {
 } from "./constants";
 import { OrderFactsIdentityError, OrderFactsSyncError } from "./errors";
 import {
+  OrderObservationInFlightError,
   applyCanonicalAndLegacy,
   asApplyDb,
   persistIncompleteWithoutReceipt,
@@ -296,7 +298,10 @@ export async function processOrderFactsWebhookJob(
       );
     }
 
-    return applyCanonicalAndLegacy({
+    // Awaited here so that a failed apply reaches the catch below and this
+    // job's own observation is closed instead of blocking the order until
+    // its lease runs out.
+    return await applyCanonicalAndLegacy({
       db: input.db,
       shopId: input.work.shopId,
       observation: mapped.observation,
@@ -322,6 +327,16 @@ export async function processOrderFactsWebhookJob(
           error instanceof Error ? error.name : "order_facts_sync_error",
       }),
     ).catch(() => undefined);
+    // Another job is still reading the same order. Nothing was written, so
+    // the delivery is retried instead of being given up as uncertain.
+    if (error instanceof OrderObservationInFlightError) {
+      return {
+        status: "incomplete",
+        reason: ORDER_FACTS_OBSERVATION_WAIT_REASON,
+        orderGid: resourceKind === "Order" ? shopifyGid : enclosingOrderGid,
+        refundGid: resourceKind === "Refund" ? shopifyGid : null,
+      };
+    }
     throw error;
   }
 }

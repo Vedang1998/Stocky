@@ -24,6 +24,12 @@ import {
   TENANT_JOB_ENVELOPE_V3_VERSION,
 } from "../../../app/sync/envelope-v3.server";
 import { issueSyncDispatchAuthority } from "../../../app/tenant/sync-dispatch-authority.server";
+import { asApplyDb } from "../../../app/lib/order-facts/sync/apply-composition";
+import { ORDER_FACTS_OBSERVATION_WAIT_REASON } from "../../../app/lib/order-facts/sync/constants";
+import {
+  abandonActiveObservation,
+  beginDirectOrderObservation,
+} from "../../../app/lib/order-facts/sync/observations";
 import { formatQueueJobId } from "../../../app/sync/dispatcher.server";
 import type { WebhookJobData } from "../../../app/jobs/queue.server";
 import {
@@ -44,6 +50,7 @@ import {
   inWindowHeader,
   setupPr6DDatabase,
   standardStore,
+  withTxnHost,
 } from "./pr6-d-pg-harness";
 import {
   moneyBag,
@@ -1047,6 +1054,78 @@ describe("PR6-D real processWebhookJob frozen topics", () => {
     expect(
       await countSyncApplicationReceipts(shopAId, job.webhookDeliveryId ?? ""),
     ).toBe(0);
+  });
+
+  it("retries an order webhook that meets another job's open read of the same order, and loses nothing", async () => {
+    const key = "d-w-held";
+    const gid = `gid://shopify/Order/${key}`;
+    const iso = new Date().toISOString();
+    adminState.stores = {
+      [gid]: standardStore(gid, {
+        header: inWindowHeader({
+          id: gid,
+          createdAt: iso,
+          updatedAt: iso,
+          processedAt: iso,
+        }),
+      }),
+    };
+    const activeObservations = () =>
+      countForShop(
+        shopAId,
+        `SELECT count(*)::int AS n FROM "OrderFactObservationInFlight"
+          WHERE "shopifyGid" = $1 AND "lifecycleState" = 'ACTIVE'`,
+        [gid],
+      );
+    // Another job (a second webhook, or the import re-reading the order) has
+    // opened its read of the order and not finished yet.
+    const other = await withTxnHost(shopAId, (db) =>
+      db.$transaction((tx) =>
+        beginDirectOrderObservation(asApplyDb(tx), {
+          shopId: shopAId,
+          resourceKind: "Order",
+          shopifyGid: gid,
+        }),
+      ),
+    );
+
+    const job = await ingestAndRun({
+      topic: "orders/edited",
+      webhookId: `wh-${key}`,
+      payload: { order_edit: { id: 1, order_id: key } },
+    });
+
+    const held = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(held.state).toBe("RETRY_WAIT");
+    expect(held.failureCode).toBe("order_facts_incomplete");
+    expect(held.failureSummary).toBe(ORDER_FACTS_OBSERVATION_WAIT_REASON);
+    expect(await factCount(gid)).toBe(0);
+    // The held-back job closed its own read; only the other job's is open.
+    expect(await activeObservations()).toBe(1);
+
+    await withTxnHost(shopAId, (db) =>
+      db.$transaction((tx) =>
+        abandonActiveObservation(asApplyDb(tx), {
+          shopId: shopAId,
+          token: other.token,
+          requestGen: other.requestGen,
+          failureCode: "test_other_job_finished",
+        }),
+      ),
+    );
+    await continueDurableJob(job.id, "orders/edited");
+
+    const done = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(done.state).toBe("SUCCEEDED");
+    expect(await factCount(gid)).toBe(1);
+    expect(await activeObservations()).toBe(0);
+    expect(
+      await countSyncApplicationReceipts(shopAId, job.webhookDeliveryId ?? ""),
+    ).toBe(1);
   });
 
   it("does not revive on an overlapping second confirmation", async () => {

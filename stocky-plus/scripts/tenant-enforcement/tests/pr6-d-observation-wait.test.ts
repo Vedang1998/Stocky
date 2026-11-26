@@ -1,7 +1,8 @@
 /**
- * Order import meeting a webhook job's still-open observation of the same
- * order: the order waits for a later pass, the rest of the file is imported,
- * and the wait is not recorded as a failure.
+ * A job that meets another job's still-open observation of the same order
+ * waits and comes back. The import leaves that order for a later pass and
+ * imports the rest of the file; a webhook job is retried. Neither records
+ * the wait as a failure.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
@@ -36,7 +37,7 @@ import {
   withTxnHost,
 } from "./pr6-d-pg-harness";
 
-describe("order import waits for an order a webhook job is still reading", () => {
+describe("order jobs that meet another job's open read of the same order", () => {
   let prisma: PrismaClient;
   let shopAId: string;
 
@@ -355,6 +356,57 @@ describe("order import waits for an order a webhook job is still reading", () =>
     await endWebhookObservation(webhook);
     expect(await runJob()).toEqual({ status: "SUCCEEDED" });
     expect(await factCount(gid)).toBe(1);
+  });
+
+  it("asks for a retry of a webhook job that meets another job's open read, and closes its own", async () => {
+    const gid = "gid://shopify/Order/wait-webhook-held";
+    const now = new Date().toISOString();
+    const admin = createOrderFactsAdmin({
+      stores: {
+        [gid]: standardStore(gid, {
+          header: inWindowHeader({
+            id: gid,
+            createdAt: now,
+            updatedAt: now,
+            processedAt: now,
+          }),
+        }),
+      },
+    });
+    const work = webhookWork({
+      shopId: shopAId,
+      topic: "orders/edited",
+      projection: { order_edit: { id: 1, order_id: "wait-webhook-held" } },
+      receivedAt: new Date(),
+    });
+    const runWebhook = () =>
+      withTxnHost(shopAId, (db) =>
+        processOrderFactsWebhookJob({
+          db,
+          admin,
+          shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+          work,
+        }),
+      );
+    const earlier = await openWebhookObservation(gid);
+
+    const held = await runWebhook();
+
+    expect(held).toEqual({
+      status: "incomplete",
+      reason: ORDER_FACTS_OBSERVATION_WAIT_REASON,
+      orderGid: gid,
+      refundGid: null,
+    });
+    expect(await factCount(gid)).toBe(0);
+    expect(await activeObservationCount(gid)).toBe(1);
+
+    await endWebhookObservation(earlier);
+    const retried = await runWebhook();
+
+    expect(retried.status, JSON.stringify(retried)).toBe("applied");
+    expect(await factCount(gid)).toBe(1);
+    expect(await activeObservationCount(gid)).toBe(0);
   });
 
   it("stores an order exactly once when a webhook job writes it before the import returns to it", async () => {
