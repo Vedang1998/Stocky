@@ -9,7 +9,7 @@ How ProPo answers Shopify's three mandatory compliance webhooks and when it dele
 | `customers/data_request` | Records the request (Shopify's request id and the number of orders listed). Closes it as "no customer data held". | On receipt |
 | `customers/redact` | Records the request (number of orders listed). Closes it as "no customer data held". | On receipt |
 | `shop/redact` (Shopify sends it 48 hours after uninstall) | Records the request. If the shop is recorded as uninstalled, the worker marks it as being erased, deletes its sessions and queued jobs, deletes every database row that belongs to the shop in batches, then deletes the shop record. If the shop is not recorded as uninstalled, the request waits (see Safety rules). | Within about a minute for a typical uninstalled shop; Shopify allows 30 days |
-| Shop uninstalled for `PRIVACY_UNINSTALLED_RETENTION_DAYS` (default 30) with no `shop/redact` received | Same erasure, opened by the worker itself. | Next worker run after the window ends |
+| Shop uninstalled for `PRIVACY_UNINSTALLED_RETENTION_DAYS` (default and maximum 28) with no `shop/redact` received | Same erasure, opened by the worker itself. | Next worker run after the window ends |
 
 Every request is one row in the `PrivacyRequest` table and is written before Shopify gets its 200, so an acknowledged request cannot be lost. A redelivery of the same webhook is recognised by its webhook id and recorded once.
 
@@ -39,11 +39,11 @@ Not covered:
 ## Safety rules
 
 - Only a shop recorded as uninstalled is erased. A shop with the app installed, or one an operator has disabled for another reason, is left alone.
-- A `shop/redact` for a shop that is not recorded as uninstalled stays open with `lastErrorCode = 'shop_not_uninstalled'` and is checked again every 6 hours. If the uninstall is recorded in that time, the erasure runs. If the shop is still not uninstalled when the request is 30 days old, the request is closed as `SHOP_ACTIVE` and nothing is deleted. Both the first hold and the close are logged as errors, because the usual cause is an `app/uninstalled` delivery that never arrived.
+- A `shop/redact` for a shop that is not recorded as uninstalled stays open with `lastErrorCode = 'shop_not_uninstalled'` and is checked again every 6 hours. If the uninstall is recorded in that time, the erasure runs. If the shop is still not uninstalled at the request's due date (30 days after it arrived), the request is closed as `SHOP_ACTIVE` and nothing is deleted. Both the first hold and the close are logged as errors, because the usual cause is an `app/uninstalled` delivery that never arrived.
 - Once erasure of a shop has started it cannot be reinstalled into the same record. A merchant who reinstalls during those seconds gets an error and a clean install on the next attempt.
 - The control-plane database role, which records requests and runs the erasure, cannot delete merchant rows directly. Deletion is one database function, owned by a role that cannot log in, that only works on a shop already marked as being erased and only sees that shop's rows. The runtime role the app uses for merchant requests can read and change a shop's rows only inside that shop's tenant context, and cannot execute the function. `npm run sync:roles:verify` and `npm run tenant:enforcement:verify` check those privileges and CI runs both.
 - A shop is recorded as erased only after the worker has confirmed its `Shop` row is gone.
-- A failed erasure stays open and is retried after 1 minute, 5 minutes, 30 minutes, 2 hours, then every 6 hours. Requests still open after 30 days are logged as errors every hour.
+- A failed erasure stays open and is retried after 1 minute, 5 minutes, 30 minutes, 2 hours, then every 6 hours. Requests still open after their due date are logged as errors every hour. The due date is 30 days after a webhook request arrived, or 30 days after the uninstall for a request the worker opens itself, so a sweep that runs late can open a request that is already overdue.
 
 ## Operating it
 
@@ -55,5 +55,5 @@ Not covered:
 
 ## Owner decisions
 
-1. **Retention window.** `PRIVACY_UNINSTALLED_RETENTION_DAYS` defaults to 30. The value is a legal and commercial choice (shorter is safer for privacy, longer lets a returning merchant keep their purchase orders and suppliers) and must match the privacy policy.
+1. **Retention window.** `PRIVACY_UNINSTALLED_RETENTION_DAYS` defaults to 28 and cannot be set higher (`OWNER TO CONFIRM` the value inside the cap, with counsel): Shopify's API Terms (section 6.2.3) require a merchant's data to be deleted within 30 days of uninstall, and the two days left over let the erasure and its retries finish. It can be shortened (safer for privacy, but a returning merchant loses purchase orders and suppliers sooner); the privacy policy must say the same.
 2. **Order facts on `customers/redact`.** Kept, for the reason above. If counsel wants them deleted instead, the listed orders' rows would have to be removed and blocked from re-syncing.
