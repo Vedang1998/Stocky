@@ -95,8 +95,9 @@ export const ORDER_FACTS_SCRATCH_RESOURCE_REASON =
 export const ORDER_FACTS_SCRATCH_SINGLE_LARGE_IMPORT_DEFAULT = true as const;
 export const ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS = 5_000;
 /**
- * An import pass that met a webhook job's still-open read of an order comes
- * back for that order after this delay.
+ * An import pass that met another job's still-open read of an order comes
+ * back for that order after this delay. The reason is the one both the
+ * import and a held-back webhook job report for the wait.
  */
 export const ORDER_FACTS_OBSERVATION_WAIT_RETRY_MS = 5_000;
 export const ORDER_FACTS_OBSERVATION_WAIT_REASON =

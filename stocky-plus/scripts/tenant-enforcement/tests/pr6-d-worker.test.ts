@@ -24,12 +24,7 @@ import {
   TENANT_JOB_ENVELOPE_V3_VERSION,
 } from "../../../app/sync/envelope-v3.server";
 import { issueSyncDispatchAuthority } from "../../../app/tenant/sync-dispatch-authority.server";
-import { asApplyDb } from "../../../app/lib/order-facts/sync/apply-composition";
 import { ORDER_FACTS_OBSERVATION_WAIT_REASON } from "../../../app/lib/order-facts/sync/constants";
-import {
-  abandonActiveObservation,
-  beginDirectOrderObservation,
-} from "../../../app/lib/order-facts/sync/observations";
 import { formatQueueJobId } from "../../../app/sync/dispatcher.server";
 import type { WebhookJobData } from "../../../app/jobs/queue.server";
 import {
@@ -43,14 +38,16 @@ import {
 import type { OrderStore } from "../../../app/lib/order-facts/admin-read/__tests__/order-store-admin";
 import {
   SHOP_A_DOMAIN,
+  countActiveOrderObservations,
   countForShop,
   countSalesDailyAggregate,
   countSyncApplicationReceipts,
   createOrderFactsAdmin,
+  endOrderObservation,
   inWindowHeader,
+  openOrderObservation,
   setupPr6DDatabase,
   standardStore,
-  withTxnHost,
 } from "./pr6-d-pg-harness";
 import {
   moneyBag,
@@ -1071,23 +1068,10 @@ describe("PR6-D real processWebhookJob frozen topics", () => {
       }),
     };
     const activeObservations = () =>
-      countForShop(
-        shopAId,
-        `SELECT count(*)::int AS n FROM "OrderFactObservationInFlight"
-          WHERE "shopifyGid" = $1 AND "lifecycleState" = 'ACTIVE'`,
-        [gid],
-      );
+      countActiveOrderObservations(shopAId, gid);
     // Another job (a second webhook, or the import re-reading the order) has
     // opened its read of the order and not finished yet.
-    const other = await withTxnHost(shopAId, (db) =>
-      db.$transaction((tx) =>
-        beginDirectOrderObservation(asApplyDb(tx), {
-          shopId: shopAId,
-          resourceKind: "Order",
-          shopifyGid: gid,
-        }),
-      ),
-    );
+    const other = await openOrderObservation(shopAId, gid);
 
     const job = await ingestAndRun({
       topic: "orders/edited",
@@ -1105,16 +1089,7 @@ describe("PR6-D real processWebhookJob frozen topics", () => {
     // The held-back job closed its own read; only the other job's is open.
     expect(await activeObservations()).toBe(1);
 
-    await withTxnHost(shopAId, (db) =>
-      db.$transaction((tx) =>
-        abandonActiveObservation(asApplyDb(tx), {
-          shopId: shopAId,
-          token: other.token,
-          requestGen: other.requestGen,
-          failureCode: "test_other_job_finished",
-        }),
-      ),
-    );
+    await endOrderObservation(shopAId, other);
     await continueDurableJob(job.id, "orders/edited");
 
     const done = await prisma.durableJob.findUniqueOrThrow({

@@ -7,7 +7,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { runOrderFactsSyncJob } from "../../../app/jobs/workers/order-facts/sync-jobs";
-import { asApplyDb } from "../../../app/lib/order-facts/sync/apply-composition";
 import {
   ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS,
   ORDER_FACTS_HEALTH_DOMAIN,
@@ -16,11 +15,7 @@ import {
 } from "../../../app/lib/order-facts/sync/constants";
 import { processOrderFactsWebhookJob } from "../../../app/lib/order-facts/sync";
 import { runOrderFactsImportStep } from "../../../app/lib/order-facts/sync/import";
-import {
-  abandonActiveObservation,
-  beginDirectOrderObservation,
-  type DirectOrderObservationHandle,
-} from "../../../app/lib/order-facts/sync/observations";
+import type { DirectOrderObservationHandle } from "../../../app/lib/order-facts/sync/observations";
 import {
   getControlPlanePrisma,
   resetControlPlanePrismaForTests,
@@ -28,10 +23,13 @@ import {
 import {
   SHOP_A_DOMAIN,
   bulkARoot,
+  countActiveOrderObservations,
   countForShop,
   createOrderFactsAdmin,
+  endOrderObservation,
   inWindowHeader,
   jsonlLines,
+  openOrderObservation,
   setupPr6DDatabase,
   standardStore,
   webhookWork,
@@ -59,44 +57,12 @@ describe("order jobs that meet another job's open read of the same order", () =>
     );
   }
 
-  function activeObservationCount(gid: string): Promise<number> {
-    return countForShop(
-      shopAId,
-      `SELECT count(*)::int AS n FROM "OrderFactObservationInFlight"
-       WHERE "shopifyGid" = $1 AND "lifecycleState" = 'ACTIVE'`,
-      [gid],
-    );
-  }
-
-  /** Opens the observation row a webhook job opens before it reads Shopify. */
-  function openWebhookObservation(
-    gid: string,
-  ): Promise<DirectOrderObservationHandle> {
-    return withTxnHost(shopAId, (db) =>
-      db.$transaction((tx) =>
-        beginDirectOrderObservation(asApplyDb(tx), {
-          shopId: shopAId,
-          resourceKind: "Order",
-          shopifyGid: gid,
-        }),
-      ),
-    );
-  }
-
-  function endWebhookObservation(
-    handle: DirectOrderObservationHandle,
-  ): Promise<void> {
-    return withTxnHost(shopAId, (db) =>
-      db.$transaction((tx) =>
-        abandonActiveObservation(asApplyDb(tx), {
-          shopId: shopAId,
-          token: handle.token,
-          requestGen: handle.requestGen,
-          failureCode: "test_webhook_finished",
-        }),
-      ),
-    );
-  }
+  const activeObservationCount = (gid: string) =>
+    countActiveOrderObservations(shopAId, gid);
+  const openWebhookObservation = (gid: string) =>
+    openOrderObservation(shopAId, gid);
+  const endWebhookObservation = (handle: DirectOrderObservationHandle) =>
+    endOrderObservation(shopAId, handle);
 
   function runImport(input: {
     key: string;
