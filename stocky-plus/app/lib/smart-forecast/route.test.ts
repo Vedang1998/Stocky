@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   entitlements: vi.fn(),
   getWorksheet: vi.fn(),
   getWorksheetLine: vi.fn(),
-  loadDemandHistory: vi.fn(),
+  loadDemandHistories: vi.fn(),
   profile: vi.fn(),
 }));
 
@@ -32,7 +32,7 @@ vi.mock("../replenishment/worksheet/store.server", () => ({
   getWorksheet: mocks.getWorksheet,
   getWorksheetLine: mocks.getWorksheetLine,
 }));
-vi.mock("./history.server", () => ({ loadDemandHistory: mocks.loadDemandHistory }));
+vi.mock("./history.server", () => ({ loadDemandHistories: mocks.loadDemandHistories }));
 vi.mock("../../tenant/bootstrap.server", () => ({
   readShopReportingProfile: mocks.profile,
 }));
@@ -101,7 +101,10 @@ beforeEach(() => {
   mocks.getWorksheet.mockResolvedValue(WORKSHEET);
   mocks.getWorksheetLine.mockResolvedValue(LINE);
   mocks.profile.mockResolvedValue({ currencyCode: "USD", installedAt: null });
-  mocks.loadDemandHistory.mockResolvedValue({ days: steadyDays(130), startLocalDate: null });
+  mocks.loadDemandHistories.mockImplementation(async (_db, input: { variantGids: string[] }) => ({
+    startLocalDate: "2026-07-07",
+    byVariant: new Map(input.variantGids.map((gid) => [gid, steadyDays(130)])),
+  }));
 });
 
 describe("Smart Forecast route", () => {
@@ -114,7 +117,7 @@ describe("Smart Forecast route", () => {
       message: "Smart Forecast is included in the Pro plan.",
     });
     expect(mocks.getWorksheet).not.toHaveBeenCalled();
-    expect(mocks.loadDemandHistory).not.toHaveBeenCalled();
+    expect(mocks.loadDemandHistories).not.toHaveBeenCalled();
   });
 
   it("says when the worksheet or the row is gone", async () => {
@@ -123,7 +126,7 @@ describe("Smart Forecast route", () => {
     mocks.getWorksheet.mockResolvedValue(null);
     expect(await loader(get({}))).toMatchObject({ ok: false, reason: "UNAVAILABLE" });
     expect(mocks.getWorksheet).toHaveBeenLastCalledWith(context.db, "");
-    expect(mocks.loadDemandHistory).not.toHaveBeenCalled();
+    expect(mocks.loadDemandHistories).not.toHaveBeenCalled();
   });
 
   it("looks the row up inside the requested worksheet", async () => {
@@ -139,13 +142,13 @@ describe("Smart Forecast route", () => {
   ])("is not offered on a $method worksheet", async (params) => {
     mocks.getWorksheet.mockResolvedValue({ ...WORKSHEET, settings: { params } });
     expect(await loader(get(QUERY))).toMatchObject({ ok: false, reason: "METHOD" });
-    expect(mocks.loadDemandHistory).not.toHaveBeenCalled();
+    expect(mocks.loadDemandHistories).not.toHaveBeenCalled();
   });
 
   it("forecasts from the worksheet's own days and stock", async () => {
     const result = await loader(get(QUERY));
-    expect(mocks.loadDemandHistory).toHaveBeenCalledWith(context.db, {
-      variantGid: LINE.variantGid,
+    expect(mocks.loadDemandHistories).toHaveBeenCalledWith(context.db, {
+      variantGids: [LINE.variantGid],
       endLocalDate: "2026-11-13",
       horizonDays: 14,
       averageDays: 28,

@@ -18,6 +18,7 @@ import {
 } from "../../../lib/replenishment/settings.server";
 import { DEFAULT_WORKSHEET_COLUMNS } from "../../../lib/replenishment/worksheet/columns";
 import {
+  applyRuleChanges,
   EMPTY_RULE,
   getVariantRule,
   loadEffectiveRules,
@@ -374,6 +375,174 @@ describe("replenishment planning inputs", () => {
       );
       expect(rows).toHaveLength(1);
       expect([1, 2, 3]).toContain(rows[0].minimumQuantity);
+    });
+  });
+
+  describe("levels for many variants at once", () => {
+    const GONE = "gid://shopify/ProductVariant/404";
+
+    async function startFrom(
+      rules: Array<{
+        shopId: string;
+        variantGid: string;
+        scopeKey: string;
+        minimumQuantity?: number;
+        leadTimeDays?: number;
+      }>,
+    ) {
+      await migrationPrisma.replenishmentVariantRule.deleteMany({
+        where: { shopId: { in: [shopAId, shopBId] } },
+      });
+      for (const rule of rules) {
+        await migrationPrisma.replenishmentVariantRule.create({ data: rule });
+      }
+    }
+
+    it("refuses more variants than one change may cover, with a message saying so", async () => {
+      const tooMany = Array.from(
+        { length: 5001 },
+        (_unused, index) => `gid://shopify/ProductVariant/${900000 + index}`,
+      );
+      await expect(
+        applyRuleChanges(dbA(), {
+          variantGids: tooMany,
+          scopeKey: SHOP_SCOPE,
+          changes: { safetyStockQuantity: 6 },
+        }),
+      ).rejects.toMatchObject({ code: "too_many_variants" });
+    });
+
+    it("changes only the chosen levels and adds levels for variants without any", async () => {
+      await startFrom([
+        {
+          shopId: shopAId,
+          variantGid: VARIANT,
+          scopeKey: SHOP_SCOPE,
+          minimumQuantity: 4,
+          leadTimeDays: 10,
+        },
+        {
+          shopId: shopBId,
+          variantGid: VARIANT,
+          scopeKey: SHOP_SCOPE,
+          minimumQuantity: 99,
+        },
+      ]);
+      const outcome = await applyRuleChanges(dbA(), {
+        variantGids: [VARIANT, OTHER_VARIANT, GONE],
+        scopeKey: SHOP_SCOPE,
+        changes: { safetyStockQuantity: 6, leadTimeDays: null },
+      });
+      expect(outcome).toEqual({
+        updated: 1,
+        created: 1,
+        cleared: 0,
+        skipped: 1,
+        missed: 0,
+      });
+
+      const rows = await ruleRows(shopAId);
+      expect(
+        rows.map((r) => [
+          r.variantGid,
+          r.minimumQuantity,
+          r.safetyStockQuantity,
+          r.leadTimeDays,
+        ]),
+      ).toEqual([
+        // The existing rule keeps its minimum; lead time is cleared.
+        [VARIANT, 4, 6, null],
+        [OTHER_VARIANT, null, 6, null],
+      ]);
+      // The same Shopify ids in shop B are untouched.
+      const [bRule] = await ruleRows(shopBId);
+      expect(bRule).toMatchObject({
+        variantGid: VARIANT,
+        minimumQuantity: 99,
+        safetyStockQuantity: null,
+      });
+    });
+
+    it("removes rules left with no levels when the changes only clear", async () => {
+      await startFrom([
+        {
+          shopId: shopAId,
+          variantGid: VARIANT,
+          scopeKey: SHOP_SCOPE,
+          minimumQuantity: 4,
+        },
+        {
+          shopId: shopAId,
+          variantGid: OTHER_VARIANT,
+          scopeKey: SHOP_SCOPE,
+          minimumQuantity: 2,
+          leadTimeDays: 5,
+        },
+        {
+          shopId: shopAId,
+          variantGid: VARIANT,
+          scopeKey: LOCATION,
+          minimumQuantity: 8,
+        },
+      ]);
+      const outcome = await applyRuleChanges(dbA(), {
+        variantGids: [VARIANT, OTHER_VARIANT, GONE],
+        scopeKey: SHOP_SCOPE,
+        changes: { minimumQuantity: null },
+      });
+      expect(outcome).toEqual({
+        updated: 1,
+        created: 0,
+        cleared: 1,
+        skipped: 0,
+        missed: 0,
+      });
+      const rows = await ruleRows(shopAId);
+      expect(
+        rows.map((r) => [
+          r.variantGid,
+          r.scopeKey,
+          r.minimumQuantity,
+          r.leadTimeDays,
+        ]),
+      ).toEqual([
+        [VARIANT, LOCATION, 8, null],
+        [OTHER_VARIANT, SHOP_SCOPE, null, 5],
+      ]);
+    });
+
+    it("works in a location's scope and refuses a location that isn't synced", async () => {
+      await startFrom([]);
+      expect(
+        await applyRuleChanges(dbB(), {
+          variantGids: [VARIANT],
+          scopeKey: LOCATION,
+          changes: { shelfLimitQuantity: 30 },
+        }),
+      ).toEqual({ updated: 0, created: 1, cleared: 0, skipped: 0, missed: 0 });
+      expect(
+        (await ruleRows(shopBId)).map((r) => [
+          r.scopeKey,
+          r.shelfLimitQuantity,
+        ]),
+      ).toEqual([[LOCATION, 30]]);
+      expect(await ruleRows(shopAId)).toEqual([]);
+
+      await expect(
+        applyRuleChanges(dbA(), {
+          variantGids: [VARIANT],
+          scopeKey: "gid://shopify/Location/404",
+          changes: { shelfLimitQuantity: 30 },
+        }),
+      ).rejects.toMatchObject({ code: "location_not_found" });
+      await expect(
+        applyRuleChanges(dbA(), {
+          variantGids: ["7001"],
+          scopeKey: SHOP_SCOPE,
+          changes: { shelfLimitQuantity: 1 },
+        }),
+      ).rejects.toMatchObject({ code: "invalid_variant" });
+      expect(await ruleRows(shopAId)).toEqual([]);
     });
   });
 

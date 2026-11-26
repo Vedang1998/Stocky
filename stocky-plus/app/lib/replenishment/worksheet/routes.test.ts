@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { Prisma } from "@prisma/client";
 import { resolveEntitlements } from "../../../billing/entitlements";
 import { PurchasingError } from "../../../services/purchasing/errors";
 import type { WorksheetHeader, WorksheetLine } from "./store.server";
@@ -21,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   previewLineSuggestion: vi.fn(),
   draftOrderPort: vi.fn(),
   saveWorksheetColumns: vi.fn(),
+  listViewVariantGids: vi.fn(),
+  applyRuleChanges: vi.fn(),
 }));
 
 const context = {
@@ -55,6 +58,11 @@ vi.mock("./store.server", async (original) => ({
   getWorksheetLine: mocks.getWorksheetLine,
   setFinalQuantity: mocks.setFinalQuantity,
   streamWorksheetLines: mocks.streamWorksheetLines,
+  listViewVariantGids: mocks.listViewVariantGids,
+}));
+vi.mock("../rules.server", async (original) => ({
+  ...(await original<typeof import("../rules.server")>()),
+  applyRuleChanges: mocks.applyRuleChanges,
 }));
 vi.mock("./orders.server", () => ({
   getOrderGroups: mocks.getOrderGroups,
@@ -187,6 +195,118 @@ describe("worksheet page action", () => {
       const response = await thrown(() => action(post({ intent: "saveColumns", column: "sku" })));
       expect(response.status).toBe(403);
       expect(mocks.saveWorksheetColumns).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("setLevels", () => {
+    const GIDS = ["gid://shopify/ProductVariant/1", "gid://shopify/ProductVariant/2"];
+
+    it("applies the chosen levels to the rows the filter and search show, in the worksheet's scope", async () => {
+      mocks.listViewVariantGids.mockResolvedValue(GIDS);
+      const outcome = { updated: 1, created: 1, cleared: 0, skipped: 0, missed: 0 };
+      mocks.applyRuleChanges.mockResolvedValue(outcome);
+      await expect(
+        action(
+          post({
+            intent: "setLevels",
+            show: "LOW_STOCK",
+            q: "shoe",
+            expectedCount: "2",
+            minimumQuantityMode: "set",
+            minimumQuantity: "4",
+            leadTimeDaysMode: "clear",
+            safetyStockQuantityMode: "keep",
+            safetyStockQuantity: "999",
+          }),
+        ),
+      ).resolves.toEqual({ intent: "setLevels", ok: true, variants: 2, outcome });
+      expect(mocks.listViewVariantGids).toHaveBeenCalledWith(
+        context.db,
+        "ws_1",
+        expect.objectContaining({ show: "LOW_STOCK", query: "shoe" }),
+      );
+      expect(mocks.applyRuleChanges).toHaveBeenCalledWith(context.db, {
+        variantGids: GIDS,
+        scopeKey: "SHOP",
+        changes: { minimumQuantity: 4, leadTimeDays: null },
+      });
+    });
+
+    it("changes nothing when the filter is unknown or missing, never falling back to every row", async () => {
+      mocks.listViewVariantGids.mockResolvedValue(GIDS);
+      for (const show of [undefined, "", "EVERYTHING"]) {
+        const fields: Record<string, string> = {
+          intent: "setLevels",
+          expectedCount: "2",
+          minimumQuantityMode: "clear",
+        };
+        if (show !== undefined) fields.show = show;
+        await expect(action(post(fields))).resolves.toEqual({
+          intent: "setLevels",
+          ok: false,
+          errors: {},
+          message: "The rows this would change are not the ones the dialog showed. Reload the page and try again.",
+        });
+      }
+      expect(mocks.listViewVariantGids).not.toHaveBeenCalled();
+      expect(mocks.applyRuleChanges).not.toHaveBeenCalled();
+    });
+
+    it("changes nothing when the rows no longer match the count the dialog showed", async () => {
+      mocks.listViewVariantGids.mockResolvedValue(GIDS);
+      for (const expectedCount of [undefined, "1", "3"]) {
+        const fields: Record<string, string> = {
+          intent: "setLevels",
+          show: "ALL",
+          minimumQuantityMode: "clear",
+        };
+        if (expectedCount !== undefined) fields.expectedCount = expectedCount;
+        await expect(action(post(fields))).resolves.toMatchObject({
+          intent: "setLevels",
+          ok: false,
+          message: expect.stringContaining("Reload the page"),
+        });
+      }
+      expect(mocks.applyRuleChanges).not.toHaveBeenCalled();
+    });
+
+    it("says nothing was saved when the save runs out of time or loses a conflict", async () => {
+      mocks.listViewVariantGids.mockResolvedValue(GIDS);
+      for (const code of ["P2028", "P2034"]) {
+        mocks.applyRuleChanges.mockRejectedValueOnce(
+          new Prisma.PrismaClientKnownRequestError("transaction gave up", { code, clientVersion: "test" }),
+        );
+        await expect(
+          action(post({ intent: "setLevels", show: "ALL", expectedCount: "2", minimumQuantityMode: "clear" })),
+        ).resolves.toEqual({
+          intent: "setLevels",
+          ok: false,
+          errors: {},
+          message: "Levels were not saved. Try again.",
+        });
+      }
+    });
+
+    it("saves nothing when a level is out of range or nothing is chosen", async () => {
+      await expect(
+        action(post({ intent: "setLevels", leadTimeDaysMode: "set", leadTimeDays: "400" })),
+      ).resolves.toMatchObject({ intent: "setLevels", ok: false, errors: { leadTimeDays: expect.any(String) } });
+      await expect(action(post({ intent: "setLevels" }))).resolves.toMatchObject({
+        intent: "setLevels",
+        ok: false,
+        errors: { form: "Choose at least one level to set or clear." },
+      });
+      expect(mocks.listViewVariantGids).not.toHaveBeenCalled();
+      expect(mocks.applyRuleChanges).not.toHaveBeenCalled();
+    });
+
+    it("is refused without a plan that includes replenishment", async () => {
+      mocks.entitlements.mockResolvedValue(resolveEntitlements([]));
+      const response = await thrown(() =>
+        action(post({ intent: "setLevels", minimumQuantityMode: "clear" })),
+      );
+      expect(response.status).toBe(403);
+      expect(mocks.applyRuleChanges).not.toHaveBeenCalled();
     });
   });
 

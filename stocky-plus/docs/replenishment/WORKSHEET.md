@@ -58,7 +58,8 @@ The **Columns** button beside the search chooses which optional columns the
 table shows: SKU, barcode, supplier, supplier SKU, ABC class, price,
 Shopify cost, supplier cost, margin and markup, stock figures, net units,
 orders, net sales, units and sales per day, days of stock, lead time,
-reorder point, forecast demand and pack size. Margin and markup use the
+reorder point, forecast demand, pack size and, on the Pro plan, Smart
+Forecast (see [SMART_FORECAST.md](SMART_FORECAST.md#the-worksheet-column)). Margin and markup use the
 supplier cost when there is one, otherwise the Shopify cost, and are blank
 when the price and the cost are in different currencies. Product, the suggested and order quantities, status and
 the detail button are always shown. The choice is saved for the shop in
@@ -91,6 +92,15 @@ locations together, or its one location. The form reads the stored levels
 when it opens, since the worksheet only has the levels it was generated with.
 Saving them does not change the open worksheet either; the next one uses
 them.
+
+**Set levels** beside the search changes the levels of every variant the
+current filter and search show, in the worksheet's stock scope. Each level is
+kept, set to a number or cleared; kept levels stay as each variant has them.
+The variants come from the worksheet's own rows on the server, never from the
+browser. All of them change in one transaction, up to a whole worksheet
+(5,000). Levels are added only for variants still in the synced catalog, and
+a variant left with no levels has its rule removed. As with one variant, the
+open worksheet does not change.
 
 ## Creating purchase orders
 
@@ -136,6 +146,5 @@ module's own permission check.
 
 - Shelf or bin location and landed or average cost columns: the app has no
   source for them yet.
-- Setting planning levels for many variants at once.
 - Choosing a supplier for one row on the worksheet.
 - End-to-end run on the development store.

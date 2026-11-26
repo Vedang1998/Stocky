@@ -13,9 +13,16 @@ import type {
   WorksheetActionResult,
 } from "../components/replenishment/types";
 import { ColumnsModal } from "../components/replenishment/ColumnsModal";
+import { LevelsBulkModal } from "../components/replenishment/LevelsBulkModal";
 import { WorksheetTable } from "../components/replenishment/WorksheetTable";
 import { AnalyticsPrerequisiteError } from "../lib/analytics/errors";
 import { localDateOf } from "../lib/analytics/shop-calendar";
+import {
+  applyRuleChanges,
+  parseRuleChangesForm,
+  ReplenishmentRuleError,
+} from "../lib/replenishment/rules.server";
+import { isTransactionAbandoned } from "../lib/replenishment/db-errors.server";
 import { SHOP_SCOPE } from "../lib/replenishment/scope";
 import {
   getReplenishmentDefaults,
@@ -50,6 +57,7 @@ import {
   getWorksheet,
   getWorksheetLine,
   getWorksheetTotals,
+  listViewVariantGids,
   loadWorksheetPage,
   setFinalQuantity,
   WorksheetEditError,
@@ -68,6 +76,7 @@ import {
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
 import { PurchasingError } from "../services/purchasing/errors";
 import { readShopReportingProfile } from "../tenant/bootstrap.server";
+import { smartForecastColumn } from "../lib/smart-forecast/worksheet.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import type { TenantDb } from "../tenant/tenant-db.server";
 
@@ -96,8 +105,9 @@ function describeRounding(worksheet: WorksheetHeader): string {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, db } = await requireAdminTenant({ request, params });
-  requireCapability(await getShopEntitlements({ admin, db }), "core.replenishment");
+  const { admin, tenant, db } = await requireAdminTenant({ request, params });
+  const entitlements = await getShopEntitlements({ admin, db });
+  requireCapability(entitlements, "core.replenishment");
   const worksheet = await requireWorksheet(db, params.worksheetId);
   const view = parseWorksheetView(new URL(request.url).searchParams);
   const selection = worksheet.settings?.selection ?? null;
@@ -111,6 +121,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     selection?.supplierId ? purchasingSources.listSuppliers(db) : [],
     getWorksheetColumns(db),
   ]);
+
+  // Smart Forecast is read only for the rows on this page, and only when the
+  // merchant chose its column; a failure shows in the column, not the page.
+  const smartForecast = await smartForecastColumn(db, {
+    shown: columns.includes("smartForecast"),
+    entitlements,
+    worksheet,
+    rows: page.lines,
+    readProfile: () => readShopReportingProfile(tenant),
+  });
 
   const { summary, settings } = worksheet;
   const scopeLocation = options.locations.find((location) => location.gid === worksheet.scopeKey);
@@ -162,6 +182,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     },
     view: { ...view, page: page.page },
     lines: page.lines,
+    smartForecast,
     matching: page.matching,
     pageCount: page.pageCount,
     totals,
@@ -203,6 +224,40 @@ export const action = async ({
   if (intent === "saveColumns") {
     const columns = await saveWorksheetColumns(db, form.getAll("column"));
     return { intent, ok: true, columns };
+  }
+
+  if (intent === "setLevels") {
+    const parsed = parseRuleChangesForm(form);
+    if (!parsed.ok) return { intent, ok: false, errors: parsed.errors };
+    // The rows the merchant is looking at: the same filter and search as the
+    // page. A bulk overwrite never falls back to "all rows": an unknown
+    // filter, or a count that no longer matches what the dialog said, is
+    // refused with nothing written.
+    const show = field(form, "show");
+    if (!(WORKSHEET_SHOW as readonly string[]).includes(show)) {
+      return { intent, ok: false, errors: {}, message: LEVELS_VIEW_CHANGED };
+    }
+    const view = parseWorksheetView(new URLSearchParams({ show, q: field(form, "q") }));
+    const variantGids = await listViewVariantGids(db, worksheet.id, view);
+    if (field(form, "expectedCount") !== String(variantGids.length)) {
+      return { intent, ok: false, errors: {}, message: LEVELS_VIEW_CHANGED };
+    }
+    try {
+      const outcome = await applyRuleChanges(db, {
+        variantGids,
+        scopeKey: worksheet.scopeKey,
+        changes: parsed.changes,
+      });
+      return { intent, ok: true, variants: variantGids.length, outcome };
+    } catch (error) {
+      if (error instanceof ReplenishmentRuleError) {
+        return { intent, ok: false, errors: {}, message: error.message };
+      }
+      if (isTransactionAbandoned(error)) {
+        return { intent, ok: false, errors: {}, message: LEVELS_NOT_SAVED };
+      }
+      throw error;
+    }
   }
 
   if (intent === "setQuantity") {
@@ -320,6 +375,10 @@ export const action = async ({
 
 const DETAIL_MODAL_ID = "worksheet-line-detail";
 const COLUMNS_MODAL_ID = "worksheet-columns";
+const LEVELS_MODAL_ID = "worksheet-levels";
+const LEVELS_NOT_SAVED = "Levels were not saved. Try again.";
+const LEVELS_VIEW_CHANGED =
+  "The rows this would change are not the ones the dialog showed. Reload the page and try again.";
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
@@ -336,7 +395,8 @@ function plural(count: number, one: string, many: string): string {
 
 export default function Worksheet() {
   const data = useLoaderData<typeof loader>();
-  const { worksheet, summary, view, lines, matching, pageCount, totals, columns } = data;
+  const { worksheet, summary, view, lines, matching, pageCount, totals, columns, smartForecast } =
+    data;
   const navigate = useNavigate();
   const [selected, setSelected] = useState<WorksheetLine | null>(null);
 
@@ -485,7 +545,7 @@ export default function Worksheet() {
             {view.pageSize !== DEFAULT_PAGE_SIZE && <input type="hidden" name="perPage" value={view.pageSize} />}
             <s-query-container>
               <s-grid
-                gridTemplateColumns="@container (inline-size > 560px) 1fr auto auto auto auto, 1fr auto"
+                gridTemplateColumns="@container (inline-size > 640px) 1fr auto auto auto auto auto, 1fr auto"
                 gap="base"
                 alignItems="end"
               >
@@ -526,6 +586,9 @@ export default function Worksheet() {
                 <s-button type="button" commandFor={COLUMNS_MODAL_ID} command="--show">
                   Columns
                 </s-button>
+                <s-button type="button" commandFor={LEVELS_MODAL_ID} command="--show">
+                  Set levels
+                </s-button>
               </s-grid>
             </s-query-container>
           </Form>
@@ -548,6 +611,7 @@ export default function Worksheet() {
                 columns={columns}
                 currencyCode={summary?.currencyCode ?? null}
                 salesDays={summary?.salesDays ?? null}
+                smartForecast={smartForecast}
                 view={view}
                 path={path}
                 detailModalId={DETAIL_MODAL_ID}
@@ -586,6 +650,17 @@ export default function Worksheet() {
       />
 
       <ColumnsModal key={columns.join(",")} id={COLUMNS_MODAL_ID} columns={columns} />
+
+      <LevelsBulkModal
+        // A new filter, search or count starts the dialog afresh, so an
+        // earlier result never sits above a button for different rows.
+        key={`${view.show}|${view.query}|${matching}`}
+        id={LEVELS_MODAL_ID}
+        matching={matching}
+        scopeName={worksheet.scope}
+        show={view.show}
+        query={view.query}
+      />
 
       <LineDetailModal
         id={DETAIL_MODAL_ID}
