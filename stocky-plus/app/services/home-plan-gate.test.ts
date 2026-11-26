@@ -3,7 +3,7 @@
  * alert) refuse a shop without an active plan on the server.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 const { db, enqueueCatalogSync, enqueueOrderFactsSync } = vi.hoisted(() => ({
   db: {
@@ -11,8 +11,11 @@ const { db, enqueueCatalogSync, enqueueOrderFactsSync } = vi.hoisted(() => ({
       shopId: "shop-home",
       myshopifyDomain: "home.myshopify.com",
     },
-    shopSettings: { findUnique: vi.fn() },
+    shopSettings: { findUnique: vi.fn(), upsert: vi.fn() },
     lowStockAlert: { updateMany: vi.fn() },
+    purchaseOrder: { count: vi.fn(async () => 0) },
+    supplier: { count: vi.fn(async () => 0) },
+    shopifyVariantCache: { count: vi.fn(async () => 0) },
   },
   enqueueCatalogSync: vi.fn(),
   enqueueOrderFactsSync: vi.fn(),
@@ -28,6 +31,28 @@ vi.mock("../jobs/queue.server", () => ({
   enqueueCatalogSync,
   enqueueOrderFactsSync,
 }));
+vi.mock("../services/forecasting.server", () => ({
+  getLowStockAlerts: vi.fn(async () => []),
+}));
+vi.mock("../services/setup-guide.server", () => ({
+  loadSetupGuide: vi.fn(async () => ({
+    steps: [],
+    doneCount: 0,
+    complete: true,
+  })),
+}));
+vi.mock("../sync/sync-status.server", () => ({
+  readCatalogSyncStatus: vi.fn(async () => []),
+}));
+
+async function load() {
+  const { loader } = await import("../routes/app._index");
+  return loader({
+    request: new Request("https://app.example/app"),
+    params: {},
+    context: {},
+  } as unknown as LoaderFunctionArgs);
+}
 
 async function post(fields: Record<string, string>): Promise<unknown> {
   const { action } = await import("../routes/app._index");
@@ -91,4 +116,28 @@ describe("Home page plan gate (SEC-18)", () => {
     expect(await post({ intent: "ackAlert" })).toEqual({ ok: false });
     expect(db.lowStockAlert.updateMany).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["no settings row", null, false],
+    [
+      "an inactive plan",
+      { subscriptionActive: false, subscriptionPlan: null },
+      false,
+    ],
+    [
+      "an active plan",
+      { subscriptionActive: true, subscriptionPlan: "growth" },
+      true,
+    ],
+  ])(
+    "Home's page load reads the plan for %s and writes nothing",
+    async (_label, settings, active) => {
+      db.shopSettings.findUnique.mockResolvedValue(settings);
+
+      const data = await load();
+
+      expect(data.planActive).toBe(active);
+      expect(db.shopSettings.upsert).not.toHaveBeenCalled();
+    },
+  );
 });

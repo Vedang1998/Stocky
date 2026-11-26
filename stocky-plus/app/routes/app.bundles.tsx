@@ -147,7 +147,11 @@ export default function Bundles() {
               step={0.0001}
               error={errors.quantity}
             />
-            <s-button type="submit" variant="primary">
+            <s-button
+              type="submit"
+              variant="primary"
+              {...(planActive ? {} : { disabled: true })}
+            >
               Add component
             </s-button>
           </s-stack>
@@ -171,7 +175,12 @@ export default function Bundles() {
                     <Form method="post">
                       <input type="hidden" name="intent" value="delete" />
                       <input type="hidden" name="id" value={part.id} />
-                      <s-button type="submit" tone="critical" variant="tertiary">
+                      <s-button
+                        type="submit"
+                        tone="critical"
+                        variant="tertiary"
+                        {...(planActive ? {} : { disabled: true })}
+                      >
                         Remove
                       </s-button>
                     </Form>

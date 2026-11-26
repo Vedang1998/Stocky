@@ -130,7 +130,7 @@ export default function Dashboard() {
         <SyncAttentionBanner attention={syncStatus.attention} />
       )}
       {!setupGuide.complete && (
-        <SetupGuide guide={setupGuide} syncing={syncing} />
+        <SetupGuide guide={setupGuide} syncing={syncing} locked={!planActive} />
       )}
 
       <s-section heading="Overview">
@@ -178,7 +178,11 @@ export default function Dashboard() {
                     <Form method="post">
                       <input type="hidden" name="intent" value="ackAlert" />
                       <input type="hidden" name="alertId" value={alert.id} />
-                      <s-button type="submit" variant="tertiary">
+                      <s-button
+                        type="submit"
+                        variant="tertiary"
+                        {...(planActive ? {} : { disabled: true })}
+                      >
                         Acknowledge
                       </s-button>
                     </Form>
@@ -190,7 +194,12 @@ export default function Dashboard() {
         </s-section>
       )}
 
-      <SyncStatus status={syncStatus} now={now} submitting={syncing} />
+      <SyncStatus
+        status={syncStatus}
+        now={now}
+        submitting={syncing}
+        locked={!planActive}
+      />
 
       <s-section slot="aside" heading="Quick links">
         <s-unordered-list>

@@ -17,8 +17,10 @@ import {
   getStocktakeLineRange,
   getStocktakeLines,
   getStocktakeProgress,
+  getStocktakeRecountHistory,
   listStocktakeLinesForExport,
   listStocktakes,
+  RECOUNT_HISTORY_LIMIT,
   STOCKTAKE_LINE_PAGE_SIZE,
 } from "../../../app/services/stocktakes/stocktake-read.server";
 import {
@@ -2256,9 +2258,32 @@ describe("stocktake workflow", () => {
       stocktakeId: string,
       lineId: string,
       actor: InventoryActor | null = STAFF,
-    ) => requestStocktakeRecount(dbA, { stocktakeId, lineId, actor }, later);
-    const keepCount = (stocktakeId: string, lineId: string) =>
-      withdrawStocktakeRecount(dbA, { stocktakeId, lineId });
+      clock = later,
+    ) => requestStocktakeRecount(dbA, { stocktakeId, lineId, actor }, clock);
+    const keepCount = (
+      stocktakeId: string,
+      lineId: string,
+      actor: InventoryActor | null = STAFF,
+      clock = later,
+    ) => withdrawStocktakeRecount(dbA, { stocktakeId, lineId, actor }, clock);
+    /** The count's recount history as stored, oldest first. */
+    const history = async (stocktakeId: string) =>
+      (
+        await prisma.stocktakeRecountEvent.findMany({
+          where: { stocktakeId },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        })
+      ).map((event) => ({
+        kind: event.kind,
+        variant: event.shopifyVariantId,
+        questioned: event.questionedQty,
+        counted: event.countedQty,
+        source: event.countSource,
+        by: event.byUserId,
+        at: event.createdAt,
+      }));
+    const at = (hour: number) => new Date(Date.UTC(2026, 10, 12, hour));
+    const clockAt = (hour: number) => ({ now: () => at(hour) });
     const recountOf = async (stocktakeId: string, variantId: string) => {
       const line = await lineOf(stocktakeId, variantId);
       return {
@@ -2630,6 +2655,317 @@ describe("stocktake workflow", () => {
       ]);
     });
 
+    describe("history", () => {
+      it("keeps every step: asked, counted again, asked again, taken back, each with who and when", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+
+        await askRecount(id, lineFor(RED), STAFF, clockAt(11));
+        await saveCount(
+          dbA,
+          { lineId: lineFor(RED), countedQty: 9, actor: COUNTER },
+          clockAt(12),
+        );
+        await askRecount(id, lineFor(RED), COUNTER, clockAt(13));
+        await keepCount(id, lineFor(RED), STAFF, clockAt(14));
+
+        const red = { variant: RED, source: null, counted: null };
+        expect(await history(id)).toEqual([
+          { ...red, kind: "REQUESTED", questioned: 7, by: "42", at: at(11) },
+          {
+            kind: "COUNTED",
+            variant: RED,
+            questioned: 7,
+            counted: 9,
+            source: "MANUAL",
+            by: "77",
+            at: at(12),
+          },
+          { ...red, kind: "REQUESTED", questioned: 9, by: "77", at: at(13) },
+          { ...red, kind: "KEPT", questioned: 9, by: "42", at: at(14) },
+        ]);
+        // The line reads as if the second request never happened; the
+        // history is where it is kept.
+        expect(await recountOf(id, RED)).toEqual(NO_RECOUNT);
+      });
+
+      it("reads the history newest first with the item's name", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await askRecount(id, lineFor(RED), STAFF, clockAt(11));
+        await saveCount(
+          dbA,
+          { lineId: lineFor(RED), countedQty: 7, actor: COUNTER },
+          clockAt(12),
+        );
+
+        const read = await getStocktakeRecountHistory(dbA, id);
+
+        expect(read.total).toBe(2);
+        expect(read.events).toEqual([
+          {
+            id: expect.any(String),
+            at: at(12),
+            kind: "COUNTED",
+            title: "Red wine",
+            sku: "RED-750",
+            questionedQty: 7,
+            // A second count that confirms the first is still a recount.
+            countedQty: 7,
+            countSource: "MANUAL",
+            byUserId: "77",
+          },
+          {
+            id: expect.any(String),
+            at: at(11),
+            kind: "REQUESTED",
+            title: "Red wine",
+            sku: "RED-750",
+            questionedQty: 7,
+            countedQty: null,
+            countSource: null,
+            byUserId: "42",
+          },
+        ]);
+      });
+
+      it("says that a recount was scanned, once, and not what the scans came to", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await askRecount(id, lineFor(RED));
+
+        await scan(
+          dbA,
+          { stocktakeId: id, code: "1111", quantity: 4, actor: COUNTER },
+          clockAt(12),
+        );
+        await scan(dbA, { stocktakeId: id, code: "1111", actor: COUNTER });
+
+        expect((await history(id)).slice(1)).toEqual([
+          {
+            kind: "COUNTED",
+            variant: RED,
+            questioned: 7,
+            counted: null,
+            source: "SCAN",
+            by: "77",
+            at: at(12),
+          },
+        ]);
+        expect((await lineOf(id, RED)).countedQty).toBe(5);
+      });
+
+      it("adds nothing for a step that changed nothing", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+
+        // Asking about a line nobody counted, and keeping a count nobody
+        // questioned.
+        await askRecount(id, lineFor(WHITE));
+        await keepCount(id, lineFor(RED));
+        expect(await history(id)).toEqual([]);
+
+        await askRecount(id, lineFor(RED));
+        // Asking twice, clearing the count, a refused scan and a count typed
+        // on a line that does not wait.
+        await askRecount(id, lineFor(RED), COUNTER);
+        await count(lineFor(RED), null);
+        await scan(dbA, {
+          stocktakeId: id,
+          code: "1111",
+          quantity: MAX_COUNTED_QUANTITY + 1,
+        });
+        await count(lineFor(WHITE), 20);
+
+        expect((await history(id)).map((event) => event.kind)).toEqual([
+          "REQUESTED",
+        ]);
+      });
+
+      it("records a request taken back after the count was cleared", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await askRecount(id, lineFor(RED));
+        await count(lineFor(RED), null);
+
+        expect(await keepCount(id, lineFor(RED), COUNTER)).toEqual({
+          ok: true,
+        });
+
+        expect((await history(id)).at(-1)).toMatchObject({
+          kind: "KEPT",
+          questioned: 7,
+          by: "77",
+        });
+      });
+
+      it("writes no history when the step is refused because the count is closed", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await askRecount(id, lineFor(RED));
+        await cancelStocktake(dbA, { stocktakeId: id, actor: STAFF });
+
+        expect(await keepCount(id, lineFor(RED))).toEqual({
+          ok: false,
+          error: CLOSED_MESSAGE,
+        });
+        expect(
+          await saveCount(dbA, { lineId: lineFor(RED), countedQty: 9 }),
+        ).toEqual({ ok: false, error: CLOSED_MESSAGE });
+
+        // The cancelled count still shows that a recount was asked for.
+        expect((await history(id)).map((event) => event.kind)).toEqual([
+          "REQUESTED",
+        ]);
+      });
+
+      it("shows the latest steps of a long history and says how many there are", async () => {
+        const { id, lineFor } = await startCount();
+        await prisma.stocktakeRecountEvent.createMany({
+          data: Array.from({ length: RECOUNT_HISTORY_LIMIT + 5 }, (_, n) => ({
+            shopId: shopAId,
+            stocktakeId: id,
+            lineItemId: lineFor(RED),
+            shopifyVariantId: RED,
+            kind: "REQUESTED" as const,
+            questionedQty: n,
+            createdAt: new Date(NOW.getTime() + n * 1000),
+          })),
+        });
+
+        const read = await getStocktakeRecountHistory(dbA, id);
+
+        expect(read.total).toBe(RECOUNT_HISTORY_LIMIT + 5);
+        expect(read.events).toHaveLength(RECOUNT_HISTORY_LIMIT);
+        expect(read.events[0].questionedQty).toBe(RECOUNT_HISTORY_LIMIT + 4);
+        expect(read.events.at(-1)?.questionedQty).toBe(5);
+      });
+
+      it("cannot be rewritten: the database refuses every change to a step", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await askRecount(id, lineFor(RED));
+        const [event] = await prisma.stocktakeRecountEvent.findMany({
+          where: { stocktakeId: id },
+        });
+
+        await expect(
+          prisma.stocktakeRecountEvent.update({
+            where: { id: event.id },
+            data: { byUserId: "1" },
+          }),
+        ).rejects.toThrow(/stocktake_recount_event_immutable/);
+        await expect(
+          dbA.stocktakeRecountEvent.updateMany({
+            where: { stocktakeId: id },
+            data: { questionedQty: 0 },
+          }),
+        ).rejects.toThrow(/stocktake_recount_event_immutable/);
+
+        expect(await history(id)).toEqual([
+          {
+            kind: "REQUESTED",
+            variant: RED,
+            questioned: 7,
+            counted: null,
+            source: null,
+            by: "42",
+            at: LATER,
+          },
+        ]);
+      });
+
+      it("refuses a step that does not fit its kind, in the database", async () => {
+        const { id, lineFor } = await startCount();
+        const step = {
+          shopId: shopAId,
+          stocktakeId: id,
+          lineItemId: lineFor(RED),
+          shopifyVariantId: RED,
+          questionedQty: 7,
+        };
+        const create = (data: Record<string, unknown>) =>
+          prisma.stocktakeRecountEvent.create({
+            data: { ...step, ...data } as never,
+          });
+
+        await expect(create({ kind: "COUNTED" })).rejects.toThrow(
+          /StocktakeRecountEvent_count_only_when_counted/,
+        );
+        await expect(
+          create({ kind: "COUNTED", countSource: "ZERO_FILL", countedQty: 0 }),
+        ).rejects.toThrow(/StocktakeRecountEvent_count_only_when_counted/);
+        await expect(
+          create({ kind: "REQUESTED", countedQty: 3 }),
+        ).rejects.toThrow(/StocktakeRecountEvent_count_only_when_counted/);
+        await expect(
+          create({ kind: "KEPT", countSource: "MANUAL" }),
+        ).rejects.toThrow(/StocktakeRecountEvent_count_only_when_counted/);
+        await expect(
+          create({ kind: "REQUESTED", questionedQty: -1 }),
+        ).rejects.toThrow(/StocktakeRecountEvent_questionedQty_nonnegative/);
+        await expect(
+          create({ kind: "COUNTED", countSource: "MANUAL", countedQty: -1 }),
+        ).rejects.toThrow(/StocktakeRecountEvent_countedQty_nonnegative/);
+
+        expect(await history(id)).toEqual([]);
+      });
+
+      it("refuses a step for a line that is not on the count, in the database", async () => {
+        const { id, lineFor } = await startCount();
+        const other = await startCount();
+        const step = {
+          shopId: shopAId,
+          stocktakeId: id,
+          shopifyVariantId: RED,
+          kind: "REQUESTED" as const,
+          questionedQty: 7,
+        };
+
+        await expect(
+          prisma.stocktakeRecountEvent.create({
+            data: { ...step, lineItemId: other.lineFor(RED) },
+          }),
+        ).rejects.toThrow(/stocktake_recount_event_wrong_line/);
+        await expect(
+          dbA.stocktakeRecountEvent.create({
+            data: { ...step, lineItemId: "no-such-line" },
+          }),
+        ).rejects.toThrow(/stocktake_recount_event_wrong_line/);
+
+        expect(await history(id)).toEqual([]);
+        // The same step for a line of this count is taken.
+        await prisma.stocktakeRecountEvent.create({
+          data: { ...step, lineItemId: lineFor(RED) },
+        });
+        expect(await history(id)).toHaveLength(1);
+      });
+
+      it("keeps the history of a count whose ID the database is asked to change", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await askRecount(id, lineFor(RED));
+
+        // The foreign key does not carry a new ID into the history: the
+        // change is refused, so no step can be moved to another count.
+        await expect(
+          prisma.$executeRaw`UPDATE "Stocktake" SET "id" = ${`${id}-moved`} WHERE "id" = ${id}`,
+        ).rejects.toThrow();
+
+        expect(await history(id)).toHaveLength(1);
+      });
+
+      it("goes with its count when the count is removed", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await askRecount(id, lineFor(RED));
+
+        await prisma.stocktake.delete({ where: { id } });
+
+        expect(await prisma.stocktakeRecountEvent.count()).toBe(0);
+      });
+    });
+
     it("refuses a requester without a request, and a negative first count, in the database", async () => {
       const { lineFor } = await startCount();
       await expect(
@@ -2823,9 +3159,53 @@ describe("stocktake workflow", () => {
         await withdrawStocktakeRecount(dbB, {
           stocktakeId: id,
           lineId: lineFor(RED),
+          actor: STAFF,
         }),
       ).toEqual(notFound);
       expect((await lineOf(id, RED)).recountRequestedAt).not.toBeNull();
+    });
+
+    it("can neither read this shop's recount history nor add to it", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await requestStocktakeRecount(dbA, {
+        stocktakeId: id,
+        lineId: lineFor(RED),
+        actor: STAFF,
+      });
+
+      expect(await getStocktakeRecountHistory(dbB, id)).toEqual({
+        events: [],
+        total: 0,
+      });
+      expect(
+        await dbB.stocktakeRecountEvent.findMany({
+          where: { stocktakeId: id },
+        }),
+      ).toEqual([]);
+      // A step written as the other shop for this shop's count is refused by
+      // the database, and one written under this shop's ID by the tenant
+      // policy.
+      const step = {
+        stocktakeId: id,
+        lineItemId: lineFor(RED),
+        shopifyVariantId: RED,
+        kind: "KEPT",
+        questionedQty: 7,
+      };
+      await expect(
+        dbB.stocktakeRecountEvent.create({ data: step }),
+      ).rejects.toThrow(/stocktake_recount_event_wrong_shop/);
+      await expect(
+        dbB.stocktakeRecountEvent.create({
+          data: { ...step, shopId: shopAId },
+        }),
+      ).rejects.toThrow();
+      await expect(
+        dbB.stocktakeRecountEvent.deleteMany({ where: { stocktakeId: id } }),
+      ).resolves.toEqual({ count: 0 });
+
+      expect(await prisma.stocktakeRecountEvent.count()).toBe(1);
     });
 
     it("counts its own item when both shops use the same barcode", async () => {
