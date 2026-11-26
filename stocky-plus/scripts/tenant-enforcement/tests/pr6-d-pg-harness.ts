@@ -6,7 +6,15 @@ import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { Client } from "pg";
 import type { OrderAdminReadClient } from "../../../app/lib/order-facts/admin-read";
-import type { OrderFactsTxnHost } from "../../../app/lib/order-facts/sync/apply-composition";
+import {
+  asApplyDb,
+  type OrderFactsTxnHost,
+} from "../../../app/lib/order-facts/sync/apply-composition";
+import {
+  abandonActiveObservation,
+  beginDirectOrderObservation,
+  type DirectOrderObservationHandle,
+} from "../../../app/lib/order-facts/sync/observations";
 import type { OrderApplyDb } from "../../../app/lib/order-facts/apply/sql";
 import { asQueryRaw, setTenant } from "./pr6-c-pg-harness";
 import { createOrderStoreAdmin, type OrderStore } from "../../../app/lib/order-facts/admin-read/__tests__/order-store-admin";
@@ -244,6 +252,53 @@ export async function countSalesDailyAggregate(shopId: string): Promise<number> 
     shopId,
     `SELECT count(*)::int AS n FROM "SalesDailyAggregate" WHERE "shopId" = $1`,
     [shopId],
+  );
+}
+
+/** Opens the observation row a job opens before it reads an order from Shopify. */
+export function openOrderObservation(
+  shopId: string,
+  shopifyGid: string,
+  options: { leaseDurationMs?: number } = {},
+): Promise<DirectOrderObservationHandle> {
+  return withTxnHost(shopId, (db) =>
+    db.$transaction((tx) =>
+      beginDirectOrderObservation(asApplyDb(tx), {
+        shopId,
+        resourceKind: "Order",
+        shopifyGid,
+        leaseDurationMs: options.leaseDurationMs,
+      }),
+    ),
+  );
+}
+
+/** Ends an observation opened with openOrderObservation without a result. */
+export function endOrderObservation(
+  shopId: string,
+  handle: DirectOrderObservationHandle,
+): Promise<void> {
+  return withTxnHost(shopId, (db) =>
+    db.$transaction((tx) =>
+      abandonActiveObservation(asApplyDb(tx), {
+        shopId,
+        token: handle.token,
+        requestGen: handle.requestGen,
+        failureCode: "test_reader_finished",
+      }),
+    ),
+  );
+}
+
+export function countActiveOrderObservations(
+  shopId: string,
+  shopifyGid: string,
+): Promise<number> {
+  return countForShop(
+    shopId,
+    `SELECT count(*)::int AS n FROM "OrderFactObservationInFlight"
+      WHERE "shopifyGid" = $1 AND "lifecycleState" = 'ACTIVE'`,
+    [shopifyGid],
   );
 }
 

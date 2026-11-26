@@ -120,12 +120,29 @@ export async function probeReceiptBeforeShopifyIo(
   }
 }
 
+/**
+ * The apply wrote nothing because another job's read of the same order is
+ * still open. Callers that do not look for this class see the same
+ * outcome-uncertain error as before.
+ */
+export class OrderObservationInFlightError extends SyncControlPlaneError {
+  constructor(message: string) {
+    super(APPLICATION_OUTCOME_UNCERTAIN, message);
+  }
+}
+
 function mapApplyError(error: unknown): never {
   if (error instanceof OrderApplyReceiptDigestConflictError) {
     throw new SyncControlPlaneError(
       APPLICATION_DIGEST_CONFLICT,
       error.message,
     );
+  }
+  if (
+    error instanceof OrderApplyReceiptNotCertifiableError &&
+    error.heldByActiveObservation
+  ) {
+    throw new OrderObservationInFlightError(error.message);
   }
   if (
     error instanceof OrderApplyReceiptNotCertifiableError ||

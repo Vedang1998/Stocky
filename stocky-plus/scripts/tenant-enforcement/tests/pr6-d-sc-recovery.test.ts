@@ -600,7 +600,7 @@ describe("PR6-D SC-02 reordered recovery and mutation rejection", () => {
     let settled = imported;
     if (imported.status !== "SUCCEEDED") {
       expect(imported.reason, JSON.stringify(imported)).toContain(
-        "blocked:active_blocker",
+        "order_observation_in_flight",
       );
       settled = await runImport();
     }
@@ -627,8 +627,8 @@ describe("PR6-D SC-02 reordered recovery and mutation rejection", () => {
     );
     const held = await runImport();
     expect(held, JSON.stringify(held)).toMatchObject({
-      status: "PARTIAL_FAILURE",
-      reason: expect.stringContaining("blocked:active_blocker"),
+      status: "CONTINUE",
+      reason: "order_observation_in_flight",
     });
     expect(await factCount(gid)).toBe(0);
 

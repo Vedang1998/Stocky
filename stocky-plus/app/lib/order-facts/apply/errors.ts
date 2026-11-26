@@ -157,11 +157,20 @@ export class OrderApplyReceiptDigestConflictError extends OrderApplyError {
 }
 
 export class OrderApplyReceiptNotCertifiableError extends OrderApplyError {
+  /**
+   * True when every observation in the batch was held back only by another
+   * job's unfinished read of the same order or refund. Nothing was written,
+   * and the same apply goes through once that read ends or its lease expires.
+   */
+  readonly heldByActiveObservation: boolean;
+
   constructor(
     message = "Receipt-bound apply did not reach a terminal accepted operation",
+    options: { heldByActiveObservation?: boolean } = {},
   ) {
     super("order_apply_receipt_not_certifiable", message);
     this.name = "OrderApplyReceiptNotCertifiableError";
+    this.heldByActiveObservation = options.heldByActiveObservation ?? false;
   }
 }
 

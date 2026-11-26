@@ -1288,6 +1288,15 @@ export async function applyOrderFacts(
         `Receipt-bound apply outcomes are not terminal-accepted: ${results
           .map((result) => `${result.outcome}:${result.reason}`)
           .join(",")}`,
+        {
+          heldByActiveObservation:
+            results.length > 0 &&
+            results.every(
+              (result) =>
+                result.outcome === "blocked" &&
+                result.reason === "active_blocker",
+            ),
+        },
       );
     }
     const inserted = await insertReceiptFinal(

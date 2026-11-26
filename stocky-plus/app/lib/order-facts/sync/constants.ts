@@ -94,6 +94,22 @@ export const ORDER_FACTS_SCRATCH_RESOURCE_REASON =
 /** One large staging attempt may reserve remaining namespace capacity. */
 export const ORDER_FACTS_SCRATCH_SINGLE_LARGE_IMPORT_DEFAULT = true as const;
 export const ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS = 5_000;
+/**
+ * An import pass that met another job's still-open read of an order comes
+ * back for that order after this delay. The reason is the one both the
+ * import and a held-back webhook job report for the wait.
+ */
+export const ORDER_FACTS_OBSERVATION_WAIT_RETRY_MS = 5_000;
+/**
+ * A webhook job has only a few attempts, so it cannot come back every few
+ * seconds the way the import does. It waits past the longest time another
+ * job's read can stay open (that read's lease), so each retry starts after
+ * every read that held it back has finished or lost its lease.
+ */
+export const ORDER_FACTS_OBSERVATION_WAIT_WEBHOOK_RETRY_MS =
+  ORDER_FACTS_DIRECT_LEASE_MS + ORDER_FACTS_OBSERVATION_WAIT_RETRY_MS;
+export const ORDER_FACTS_OBSERVATION_WAIT_REASON =
+  "order_observation_in_flight" as const;
 export const ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS = 600_000;
 export const ORDER_FACTS_WINDOW_PAGE_SIZE = 50;
 export const ORDER_FACTS_MAX_WINDOW_PAGES = 200;

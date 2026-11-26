@@ -55,7 +55,12 @@ import {
   isOrderFactsWebhookTopic,
   processOrderFactsWebhookJob,
 } from "../../lib/order-facts/sync";
-import { ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS } from "../../lib/order-facts/sync/constants";
+import {
+  ORDER_FACTS_DIRECT_LEASE_MS,
+  ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS,
+  ORDER_FACTS_OBSERVATION_WAIT_REASON,
+  ORDER_FACTS_OBSERVATION_WAIT_WEBHOOK_RETRY_MS,
+} from "../../lib/order-facts/sync/constants";
 import type { OrderFactsMerchantHost } from "../../lib/order-facts/sync/types";
 import {
   runOrderFactsReconcileJob,
@@ -345,6 +350,31 @@ async function runLegacyWebhookHandler(
   }
 }
 
+type OrderFactsRetryClassification =
+  | "first_confirmation_pending"
+  | "observation_wait"
+  | "incomplete";
+
+/**
+ * How the worker retries an order webhook job that could not finish yet.
+ * A job held back by another job's open read of the same order waits past
+ * that read's lease, because a webhook job has only a few attempts.
+ */
+function orderFactsRetryPlan(retry: {
+  reason: string;
+  classification: OrderFactsRetryClassification;
+}) {
+  const waitingOnObservation = retry.classification === "observation_wait";
+  return {
+    errorCode: `order_facts_${retry.classification}`,
+    failureSummary: retry.reason,
+    backoffMs: waitingOnObservation
+      ? ORDER_FACTS_OBSERVATION_WAIT_WEBHOOK_RETRY_MS
+      : ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS,
+    retryClassification: retry.classification,
+  };
+}
+
 async function applyOrderFactsWebhookIfOwned(input: {
   topic: string;
   ctx: TenantJobContext | { tenant: { shopId: string; myshopifyDomain: string }; db: TenantDb };
@@ -368,7 +398,7 @@ async function applyOrderFactsWebhookIfOwned(input: {
   | {
       handled: true;
       applicationStatus: string;
-      retry?: { reason: string; classification: string };
+      retry?: { reason: string; classification: OrderFactsRetryClassification };
       fail?: { code: string; reason: string };
     }
 > {
@@ -400,7 +430,7 @@ async function applyOrderFactsWebhookIfOwned(input: {
       jobAttemptId: input.attemptId,
       correlationId: input.durable.correlationId,
       receivedAt: input.durable.createdAt,
-      leaseDurationMs: 60_000,
+      leaseDurationMs: ORDER_FACTS_DIRECT_LEASE_MS,
     },
     runLegacy: runLegacyWebhookHandler,
     requestedCanonicalIdentitiesPerTransaction:
@@ -420,7 +450,9 @@ async function applyOrderFactsWebhookIfOwned(input: {
         classification:
           result.status === "first_confirmation_pending"
             ? "first_confirmation_pending"
-            : "incomplete",
+            : result.reason === ORDER_FACTS_OBSERVATION_WAIT_REASON
+              ? "observation_wait"
+              : "incomplete",
       },
     };
   }
@@ -653,13 +685,7 @@ export async function processWebhookJob(
             shopId: durable.shopId,
             attemptId: attempt.id,
             workerId,
-            errorCode:
-              orderFacts.retry.classification === "first_confirmation_pending"
-                ? "order_facts_first_confirmation_pending"
-                : "order_facts_incomplete",
-            failureSummary: orderFacts.retry.reason,
-            backoffMs: ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS,
-            retryClassification: orderFacts.retry.classification,
+            ...orderFactsRetryPlan(orderFacts.retry),
           });
           return;
         }
@@ -863,13 +889,7 @@ export async function processWebhookJob(
             shopId: durable.shopId,
             attemptId: attempt.id,
             workerId,
-            errorCode:
-              orderFacts.retry.classification === "first_confirmation_pending"
-                ? "order_facts_first_confirmation_pending"
-                : "order_facts_incomplete",
-            failureSummary: orderFacts.retry.reason,
-            backoffMs: ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS,
-            retryClassification: orderFacts.retry.classification,
+            ...orderFactsRetryPlan(orderFacts.retry),
           });
           return;
         }

@@ -24,6 +24,7 @@ import {
   TENANT_JOB_ENVELOPE_V3_VERSION,
 } from "../../../app/sync/envelope-v3.server";
 import { issueSyncDispatchAuthority } from "../../../app/tenant/sync-dispatch-authority.server";
+import { ORDER_FACTS_OBSERVATION_WAIT_REASON } from "../../../app/lib/order-facts/sync/constants";
 import { formatQueueJobId } from "../../../app/sync/dispatcher.server";
 import type { WebhookJobData } from "../../../app/jobs/queue.server";
 import {
@@ -37,11 +38,15 @@ import {
 import type { OrderStore } from "../../../app/lib/order-facts/admin-read/__tests__/order-store-admin";
 import {
   SHOP_A_DOMAIN,
+  countActiveOrderObservations,
   countForShop,
   countSalesDailyAggregate,
   countSyncApplicationReceipts,
   createOrderFactsAdmin,
+  endOrderObservation,
   inWindowHeader,
+  openOrderObservation,
+  queryForShop,
   setupPr6DDatabase,
   standardStore,
 } from "./pr6-d-pg-harness";
@@ -1047,6 +1052,164 @@ describe("PR6-D real processWebhookJob frozen topics", () => {
     expect(
       await countSyncApplicationReceipts(shopAId, job.webhookDeliveryId ?? ""),
     ).toBe(0);
+  });
+
+  it("retries an order webhook that meets another job's open read of the same order, and loses nothing", async () => {
+    const key = "d-w-held";
+    const gid = `gid://shopify/Order/${key}`;
+    const iso = new Date().toISOString();
+    adminState.stores = {
+      [gid]: standardStore(gid, {
+        header: inWindowHeader({
+          id: gid,
+          createdAt: iso,
+          updatedAt: iso,
+          processedAt: iso,
+        }),
+      }),
+    };
+    const activeObservations = () =>
+      countActiveOrderObservations(shopAId, gid);
+    // Another job (a second webhook, or the import re-reading the order) has
+    // opened its read of the order and not finished yet.
+    const other = await openOrderObservation(shopAId, gid);
+
+    const job = await ingestAndRun({
+      topic: "orders/edited",
+      webhookId: `wh-${key}`,
+      payload: { order_edit: { id: 1, order_id: key } },
+    });
+
+    const held = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(held.state).toBe("RETRY_WAIT");
+    expect(held.failureCode).toBe("order_facts_observation_wait");
+    expect(held.failureSummary).toBe(ORDER_FACTS_OBSERVATION_WAIT_REASON);
+    expect(await factCount(gid)).toBe(0);
+    // The held-back job closed its own read; only the other job's is open.
+    expect(await activeObservations()).toBe(1);
+
+    await endOrderObservation(shopAId, other);
+    await continueDurableJob(job.id, "orders/edited");
+
+    const done = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(done.state).toBe("SUCCEEDED");
+    expect(await factCount(gid)).toBe(1);
+    expect(await activeObservations()).toBe(0);
+    expect(
+      await countSyncApplicationReceipts(shopAId, job.webhookDeliveryId ?? ""),
+    ).toBe(1);
+  });
+
+  it("makes a held-back order webhook wait until the other read can no longer be open", async () => {
+    const key = "d-w-held-lease";
+    const gid = `gid://shopify/Order/${key}`;
+    const iso = new Date().toISOString();
+    adminState.stores = {
+      [gid]: standardStore(gid, {
+        header: inWindowHeader({
+          id: gid,
+          createdAt: iso,
+          updatedAt: iso,
+          processedAt: iso,
+        }),
+      }),
+    };
+    // The other job never finishes its read (for example its worker died),
+    // so only the end of its lease frees the order.
+    await openOrderObservation(shopAId, gid);
+    const [blocker] = await queryForShop<{
+      leaseDurationMs: number;
+      leaseExpiresAt: Date;
+    }>(
+      shopAId,
+      `SELECT "leaseDurationMs", "leaseExpiresAt"
+         FROM "OrderFactObservationInFlight"
+        WHERE "shopifyGid" = $1 AND "lifecycleState" = 'ACTIVE'`,
+      [gid],
+    );
+
+    const job = await ingestAndRun({
+      topic: "orders/edited",
+      webhookId: `wh-${key}`,
+      payload: { order_edit: { id: 1, order_id: key } },
+    });
+
+    const held = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(held.state).toBe("RETRY_WAIT");
+    expect(held.failureCode).toBe("order_facts_observation_wait");
+    const attempt = await prisma.jobAttempt.findFirstOrThrow({
+      where: { durableJobId: job.id },
+      orderBy: { attemptNumber: "desc" },
+    });
+    expect(attempt.retryClassification).toBe("observation_wait");
+    // The wait is longer than the other read's whole lease, and the next
+    // try is not due before that lease has run out.
+    expect(attempt.backoffMs).toBeGreaterThan(blocker!.leaseDurationMs);
+    expect(held.nextEligibleAt!.getTime()).toBeGreaterThan(
+      blocker!.leaseExpiresAt.getTime(),
+    );
+  });
+
+  it("applies a held-back order webhook once a dead reader's lease has run out, without dead-lettering it", async () => {
+    const key = "d-w-held-dead";
+    const gid = `gid://shopify/Order/${key}`;
+    const iso = new Date().toISOString();
+    adminState.stores = {
+      [gid]: standardStore(gid, {
+        header: inWindowHeader({
+          id: gid,
+          createdAt: iso,
+          updatedAt: iso,
+          processedAt: iso,
+        }),
+      }),
+    };
+    // A reader that opened its read and died. Nothing ever closes this row;
+    // the short lease stands in for the time that passes before the retry.
+    await openOrderObservation(shopAId, gid, { leaseDurationMs: 1_500 });
+
+    const job = await ingestAndRun({
+      topic: "orders/edited",
+      webhookId: `wh-${key}`,
+      payload: { order_edit: { id: 1, order_id: key } },
+    });
+    const held = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(held.state).toBe("RETRY_WAIT");
+    expect(await factCount(gid)).toBe(0);
+
+    await vi.waitFor(
+      async () => {
+        expect(
+          await countForShop(
+            shopAId,
+            `SELECT count(*)::int AS n FROM "OrderFactObservationInFlight"
+              WHERE "shopifyGid" = $1 AND "lifecycleState" = 'ACTIVE'
+                AND clock_timestamp() >= "leaseExpiresAt"`,
+            [gid],
+          ),
+        ).toBe(1);
+      },
+      { timeout: 5_000, interval: 100 },
+    );
+    await continueDurableJob(job.id, "orders/edited");
+
+    const done = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(done.state).toBe("SUCCEEDED");
+    expect(done.attemptCount).toBe(2);
+    expect(await factCount(gid)).toBe(1);
+    expect(
+      await countSyncApplicationReceipts(shopAId, job.webhookDeliveryId ?? ""),
+    ).toBe(1);
   });
 
   it("does not revive on an overlapping second confirmation", async () => {
