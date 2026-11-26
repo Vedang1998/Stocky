@@ -259,6 +259,7 @@ export async function countSalesDailyAggregate(shopId: string): Promise<number> 
 export function openOrderObservation(
   shopId: string,
   shopifyGid: string,
+  options: { leaseDurationMs?: number } = {},
 ): Promise<DirectOrderObservationHandle> {
   return withTxnHost(shopId, (db) =>
     db.$transaction((tx) =>
@@ -266,6 +267,7 @@ export function openOrderObservation(
         shopId,
         resourceKind: "Order",
         shopifyGid,
+        leaseDurationMs: options.leaseDurationMs,
       }),
     ),
   );
