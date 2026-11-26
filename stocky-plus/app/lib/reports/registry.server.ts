@@ -26,6 +26,12 @@ import {
   loadTransferLines,
 } from "../analytics/stock-documents.server";
 import {
+  loadFirstStockSnapshotDate,
+  loadStockDayTotals,
+  loadStockLevelsOn,
+  loadStockSnapshotDays,
+} from "../analytics/stock-history.server";
+import {
   loadLastOrderedAt,
   loadStockLevels,
   loadStockLocations,
@@ -70,6 +76,10 @@ import {
   buildStocktakeVarianceReport,
   buildTransfersReport,
 } from "./stock-document-reports";
+import {
+  buildStockHistoryReport,
+  buildStockOnDateReport,
+} from "./stock-history-reports";
 import {
   DEAD_STOCK_WINDOWS,
   DEFAULT_DEAD_STOCK_DAYS,
@@ -465,6 +475,66 @@ const REPORTS: readonly RegisteredReport[] = [
         locations,
         currencyCode: context.currencyCode,
         filter: request.options[STOCK_FILTER_OPTION.key],
+      });
+    },
+  }),
+  register({
+    id: "stock-history",
+    title: "Stock history",
+    description:
+      "Units on hand at the end of each day, from the daily copies the app keeps. Days it did not capture are marked, not shown as zero.",
+    group: "Inventory",
+    usesDateRange: true,
+    options: [],
+    load: async (context, request) => {
+      const { startLocalDate: start, endLocalDate: end } = request.range;
+      const [snapshots, totals, firstCapturedDate] = await Promise.all([
+        loadStockSnapshotDays(context.db, start, end),
+        loadStockDayTotals(context.db, start, end),
+        loadFirstStockSnapshotDate(context.db),
+      ]);
+      return buildStockHistoryReport({
+        start,
+        end,
+        snapshots,
+        totals,
+        firstCapturedDate,
+        today: context.today,
+        timeZone: context.timeZone,
+      });
+    },
+  }),
+  register({
+    id: "stock-on-date",
+    title: "Stock on a past date",
+    description:
+      "Quantities, cost and retail value at the end of the last day of the range, as the app saved them that day.",
+    group: "Inventory",
+    usesDateRange: true,
+    options: [],
+    load: async (context, request) => {
+      const date = request.range.endLocalDate;
+      const [snapshots, firstCapturedDate, locations] = await Promise.all([
+        loadStockSnapshotDays(context.db, date, date),
+        loadFirstStockSnapshotDate(context.db),
+        loadStockLocations(context.db),
+      ]);
+      const snapshot = snapshots[0] ?? null;
+      const levels = snapshot ? await loadStockLevelsOn(context.db, date) : [];
+      const { directory } = await loadVariantNames(
+        context,
+        levels.map((level) => level.variantGid),
+      );
+      return buildStockOnDateReport({
+        date,
+        today: context.today,
+        snapshot,
+        firstCapturedDate,
+        levels,
+        directory,
+        locations,
+        currencyCode: context.currencyCode,
+        timeZone: context.timeZone,
       });
     },
   }),

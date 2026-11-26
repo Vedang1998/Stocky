@@ -17,6 +17,11 @@ import {
   loadCompletedStocktakeLines,
   loadTransferLines,
 } from "../../../lib/analytics/stock-documents.server";
+import {
+  loadFirstStockSnapshotDate,
+  loadStockDayTotals,
+  loadStockSnapshotDays,
+} from "../../../lib/analytics/stock-history.server";
 import { loadLastOrderedAt } from "../../../lib/analytics/stock-levels.server";
 import { toCsv } from "../../../lib/csv.server";
 import { findReport, loadReportContext } from "../../../lib/reports/registry.server";
@@ -1006,6 +1011,134 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
 
         expect(orders.map((order) => order.poNumber)).toEqual(["PO-B-IN"]);
         expect(orders[0]!.orderedUnits).toBe(77);
+      });
+    });
+
+    describe("stock history", () => {
+      const HIST = "range=custom&start=2026-11-04&end=2026-11-08";
+
+      async function seedDay(
+        shopId: string,
+        localDate: string,
+        levels: Array<{ onHand: number | null; location: string }>,
+        variantGid = VARIANT_OLD,
+      ) {
+        await migrationPrisma.dailyStockSnapshot.create({
+          data: {
+            shopId,
+            localDate,
+            timeZone: TZ,
+            dayEndedAt: new Date(`${localDate}T12:00:00Z`),
+            capturedAt: new Date(`${localDate}T14:00:00Z`),
+            levelCount: levels.length,
+          },
+        });
+        for (const level of levels) {
+          await migrationPrisma.dailyStockLevel.create({
+            data: {
+              shopId,
+              localDate,
+              variantGid,
+              locationGid: level.location,
+              availableQuantity: level.onHand,
+              onHandQuantity: level.onHand,
+              unitCostAmount: "4.00",
+              unitCostCurrencyCode: "USD",
+              priceAmount: "10.00",
+              priceCurrencyCode: "USD",
+            },
+          });
+        }
+      }
+
+      beforeAll(async () => {
+        // 5 Nov and 8 Nov are not captured for shop A.
+        await seedDay(shopAId, "2026-11-04", [
+          { onHand: 10, location: LOCATION_MAIN },
+          { onHand: null, location: "gid://shopify/Location/72" },
+        ]);
+        await seedDay(shopAId, "2026-11-06", [
+          { onHand: 7, location: LOCATION_MAIN },
+        ]);
+        await seedDay(shopAId, "2026-11-07", []);
+        await seedDay(shopBId, "2026-11-06", [
+          { onHand: 999, location: LOCATION_MAIN },
+        ]);
+      });
+
+      it("marks the days the app did not capture instead of showing zeros", async () => {
+        const result = await page("stock-history", HIST);
+        const byDate = Object.fromEntries(
+          table(result).map((row) => [row.date, row]),
+        );
+
+        expect(Object.keys(byDate).sort()).toEqual([
+          "2026-11-04",
+          "2026-11-05",
+          "2026-11-06",
+          "2026-11-07",
+          "2026-11-08",
+        ]);
+        expect(byDate["2026-11-04"]).toMatchObject({
+          status: "Captured",
+          onHand: "10",
+          levelCount: "2",
+          unreported: "1",
+        });
+        expect(byDate["2026-11-05"]).toMatchObject({
+          status: "Not captured",
+          onHand: "—",
+        });
+        expect(byDate["2026-11-06"]).toMatchObject({ onHand: "7" });
+        // Saved with no tracked stock: really zero.
+        expect(byDate["2026-11-07"]).toMatchObject({
+          status: "Captured",
+          onHand: "0",
+        });
+        expect(byDate["2026-11-08"]?.status).toBe("Not captured");
+      });
+
+      it("lists one past day with the cost and price saved that day", async () => {
+        const result = await page("stock-on-date", "range=custom&start=2026-11-04&end=2026-11-06");
+
+        expect(table(result)).toHaveLength(1);
+        expect(table(result)[0]).toMatchObject({
+          product: "Trail Shoe",
+          variant: "Size 9",
+          onHand: "7",
+          unitCost: "$4.00",
+          costValue: "$28.00",
+          retailValue: "$70.00",
+        });
+        expect(tiles(result)["Units on hand"]).toBe("7");
+      });
+
+      it("shows no rows for a day that was not captured", async () => {
+        const result = await page("stock-on-date", "range=custom&start=2026-11-04&end=2026-11-05");
+
+        expect(table(result)).toEqual([]);
+        expect(result.notices.map((n) => n.heading)).toContain(
+          "Stock was not captured on 2026-11-05",
+        );
+      });
+
+      it("keeps each shop's history to itself", async () => {
+        const [snapshotsA, snapshotsB, totalsB] = await Promise.all([
+          loadStockSnapshotDays(dbA, "2026-11-01", "2026-11-30"),
+          loadStockSnapshotDays(dbB, "2026-11-01", "2026-11-30"),
+          loadStockDayTotals(dbB, "2026-11-01", "2026-11-30"),
+        ]);
+
+        expect(snapshotsA.map((day) => day.localDate)).toEqual([
+          "2026-11-04",
+          "2026-11-06",
+          "2026-11-07",
+        ]);
+        expect(snapshotsB.map((day) => day.localDate)).toEqual(["2026-11-06"]);
+        expect(totalsB).toEqual([
+          { localDate: "2026-11-06", onHand: 999, unreportedLevels: 0 },
+        ]);
+        expect(await loadFirstStockSnapshotDate(dbA)).toBe("2026-11-04");
       });
     });
   });

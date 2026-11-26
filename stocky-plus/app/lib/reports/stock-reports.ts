@@ -32,11 +32,11 @@ export const STOCK_METHOD_NOTES = [
   "A negative on-hand quantity is shown as it is and valued at zero.",
 ];
 
-function money(value: Decimal, currencyCode: string): string {
+export function money(value: Decimal, currencyCode: string): string {
   return formatCell("money", value, currencyCode);
 }
 
-function count(value: number): string {
+export function count(value: number): string {
   return formatCell("integer", value, "");
 }
 
@@ -65,12 +65,15 @@ function priceIn(
     : null;
 }
 
-function valueOf(onHand: number | null, unit: Decimal | null): Decimal | null {
+export function valueOf(
+  onHand: number | null,
+  unit: Decimal | null,
+): Decimal | null {
   if (onHand === null || unit === null) return null;
   return unit.times(Math.max(onHand, 0));
 }
 
-function sumValues(values: Iterable<Decimal | null>): Decimal {
+export function sumValues(values: Iterable<Decimal | null>): Decimal {
   let total = ZERO;
   for (const value of values) if (value) total = total.plus(value);
   return total;

@@ -35,6 +35,8 @@ describe("report registry", () => {
       "gross-profit",
       "abc-analysis",
       "stock-on-hand",
+      "stock-history",
+      "stock-on-date",
       "dead-stock",
       "transfers",
       "stocktake-variances",
