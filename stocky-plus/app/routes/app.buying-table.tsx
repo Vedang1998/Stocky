@@ -9,7 +9,10 @@ import { Form, redirect, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import type { AbcMetric } from "@prisma/client";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { requireActivePlanSnapshot } from "../billing/entitlements.server";
+import {
+  requireActivePlanSnapshot,
+  snapshotAllowsChanges,
+} from "../billing/entitlements.server";
 import {
   fetchInventoryLevels,
   fetchLocations,
@@ -54,16 +57,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const metric: AbcMetric =
     url.searchParams.get("metric") === "VOLUME" ? "VOLUME" : "REVENUE";
 
-  const settings = await db.shopSettings.upsert({
-    where: { shop },
-    create: { shop },
-    update: {},
-  });
-
-  const [suppliers, locations] = await Promise.all([
+  const [settings, suppliers, locations] = await Promise.all([
+    // Read only: the afterAuth hook creates the row (TEN-02).
+    db.shopSettings.findUnique({
+      where: { shop },
+      select: { subscriptionActive: true },
+    }),
     db.supplier.findMany({ where: {}, orderBy: { name: "asc" } }),
     fetchLocations(admin),
   ]);
+  const subscriptionActive = snapshotAllowsChanges(settings);
   const locationId =
     url.searchParams.get("locationId") || locations[0]?.id || "all";
 
@@ -73,7 +76,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const supplierNotFound =
     !supplier && requestedSupplierId !== "" && requestedSupplierId !== NO_VENDOR;
 
-  if (supplier && settings.subscriptionActive) {
+  if (supplier && subscriptionActive) {
     const mappings = await db.supplierSkuMapping.findMany({
       where: { supplierId: supplier.id },
       take: 50,
@@ -157,7 +160,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     locationId,
     metric,
     rows,
-    gated: !settings.subscriptionActive,
+    gated: !subscriptionActive,
     allowDevActivate:
       process.env.NODE_ENV !== "production" &&
       process.env.ALLOW_DEV_SUBSCRIPTION_ACTIVATE === "true",

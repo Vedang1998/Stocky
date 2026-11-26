@@ -239,4 +239,10 @@ describe("planSummary", () => {
     );
     expect(text).not.toMatch(/free/i);
   });
+
+  it("treats a missing settings row as no plan", () => {
+    expect(planSummary(null)).toBe(
+      "No active plan. An active plan is needed to make changes.",
+    );
+  });
 });

@@ -151,8 +151,18 @@ export async function requireActivePlanSnapshot(db: TenantDb): Promise<void> {
     where: { shop: db.authority.myshopifyDomain },
     select: { subscriptionActive: true },
   });
-  if (settings?.subscriptionActive === true) return;
+  if (snapshotAllowsChanges(settings)) return;
   throw planRequired(NO_ACTIVE_PLAN_MESSAGE);
+}
+
+/**
+ * The one rule for "the stored snapshot allows changes", for loaders that
+ * already hold the ShopSettings row (Home, Buying Table).
+ */
+export function snapshotAllowsChanges(
+  settings: { subscriptionActive: boolean } | null,
+): boolean {
+  return settings?.subscriptionActive === true;
 }
 
 /**
