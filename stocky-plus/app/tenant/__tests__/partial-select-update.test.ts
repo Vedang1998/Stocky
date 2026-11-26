@@ -116,6 +116,87 @@ describe("tenant partial-selection and update projections (F-PR2C-05/06)", () =>
     expect(row._count.skuMappings).toBe(1);
   });
 
+  // A list read used to keep the ownership fields the client adds for its own
+  // checks (id, shopId and, on models that hold the relation, the whole shop
+  // row) on every row, because only single rows were stripped at the top level.
+  describe("list reads return only the fields the caller selected", () => {
+    async function seedSupplierWithMapping() {
+      const supplier = await prisma.supplier.create({
+        data: { shop: SHOP_A_DOMAIN, shopId: shopAId, name: "A-sup" },
+      });
+      await prisma.supplierSkuMapping.create({
+        data: {
+          shopId: shopAId,
+          supplierId: supplier.id,
+          shopifyVariantId: SHARED_EXTERNAL_ID,
+          vendorSku: "v-1",
+        },
+      });
+      return supplier;
+    }
+
+    it("findMany on a model that holds the shop relation", async () => {
+      await seedSupplierWithMapping();
+      await prisma.supplier.create({
+        data: { shop: SHOP_A_DOMAIN, shopId: shopAId, name: "A-sup-2" },
+      });
+
+      const rows = await dbA().supplier.findMany({
+        select: { name: true },
+        orderBy: { name: "asc" },
+      });
+      expect(rows).toEqual([{ name: "A-sup" }, { name: "A-sup-2" }]);
+    });
+
+    it("findMany on a child model", async () => {
+      await seedSupplierWithMapping();
+
+      const rows = await dbA().supplierSkuMapping.findMany({
+        select: { vendorSku: true },
+      });
+      expect(rows).toEqual([{ vendorSku: "v-1" }]);
+    });
+
+    it("findMany with a nested list keeps both levels to the selection", async () => {
+      await seedSupplierWithMapping();
+
+      const rows = await dbA().supplier.findMany({
+        select: { name: true, skuMappings: { select: { vendorSku: true } } },
+      });
+      expect(rows).toEqual([
+        { name: "A-sup", skuMappings: [{ vendorSku: "v-1" }] },
+      ]);
+    });
+
+    it("keeps id and shopId when the caller selected them", async () => {
+      const supplier = await seedSupplierWithMapping();
+
+      const rows = await dbA().supplier.findMany({
+        select: { id: true, shopId: true, name: true },
+      });
+      expect(rows).toEqual([
+        { id: supplier.id, shopId: shopAId, name: "A-sup" },
+      ]);
+    });
+
+    it("still returns only the caller's own rows", async () => {
+      await seedSupplierWithMapping();
+      await prisma.supplier.create({
+        data: { shop: SHOP_B_DOMAIN, shopId: shopBId, name: "B-sup" },
+      });
+
+      const rows = await dbA().supplier.findMany({ select: { name: true } });
+      expect(rows).toEqual([{ name: "A-sup" }]);
+    });
+
+    it("findFirst on the same selection is unchanged", async () => {
+      await seedSupplierWithMapping();
+
+      const row = await dbA().supplier.findFirst({ select: { name: true } });
+      expect(row).toEqual({ name: "A-sup" });
+    });
+  });
+
   it("update supports nested create and include projection", async () => {
     const supplier = await prisma.supplier.create({
       data: { shop: SHOP_A_DOMAIN, shopId: shopAId, name: "A" },
