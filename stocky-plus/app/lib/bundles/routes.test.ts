@@ -9,9 +9,9 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 const db = vi.hoisted(() => ({
   authority: { shopId: "shop-a", myshopifyDomain: "shop-a.myshopify.com" },
-  shopSettings: { findUnique: vi.fn() },
   bomComponent: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
   shopifyVariantCache: { findMany: vi.fn() },
+  shopSettings: { findUnique: vi.fn() },
 }));
 
 vi.mock("../../tenant/require-admin-tenant.server", () => ({
@@ -36,14 +36,22 @@ function post(fields: Record<string, string>): ActionFunctionArgs {
 const ADD = { intent: "add", bundleVariantId: "v-box", componentVariantId: "v-part", quantity: "0.1" };
 
 beforeEach(() => {
-  db.shopSettings.findUnique.mockReset().mockResolvedValue({ subscriptionActive: true });
   db.bomComponent.findMany.mockReset().mockResolvedValue([]);
   db.bomComponent.upsert.mockReset().mockResolvedValue({});
   db.bomComponent.deleteMany.mockReset().mockResolvedValue({ count: 1 });
   db.shopifyVariantCache.findMany
     .mockReset()
     .mockResolvedValue([{ shopifyVariantId: "v-box" }, { shopifyVariantId: "v-part" }]);
+  db.shopSettings.findUnique.mockReset().mockResolvedValue({ subscriptionActive: true });
 });
+
+function load() {
+  return loader({
+    request: new Request("https://app.example/app/bundles"),
+    params: {},
+    context: {},
+  } as unknown as LoaderFunctionArgs);
+}
 
 describe("bundles loader", () => {
   it("sends each quantity as an exact decimal string (#77)", async () => {
@@ -58,15 +66,19 @@ describe("bundles loader", () => {
     db.shopifyVariantCache.findMany.mockResolvedValue([
       { shopifyVariantId: "v-box", title: "Gift box" },
     ]);
-    const data = await loader({
-      request: new Request("https://app.example/app/bundles"),
-      params: {},
-      context: {},
-    } as unknown as LoaderFunctionArgs);
+    const data = await load();
     expect(data.components).toEqual([
       { id: "c1", bundleVariantId: "v-box", componentVariantId: "v-part", quantity: "2" },
     ]);
     expect(data.variants).toEqual([{ shopifyVariantId: "v-box", title: "Gift box" }]);
+  });
+
+  it("tells the page whether the plan allows changes (SEC-18)", async () => {
+    expect((await load()).planActive).toBe(true);
+    db.shopSettings.findUnique.mockResolvedValue({ subscriptionActive: false });
+    expect((await load()).planActive).toBe(false);
+    db.shopSettings.findUnique.mockResolvedValue(null);
+    expect((await load()).planActive).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@
  * Reports analytics over canonical facts, through TenantDb on the restricted
  * runtime role with FORCE RLS enforced. Facts are seeded by the migration owner.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { loadAbcParityRun } from "../../../lib/analytics/abc-parity.server";
 import { loadCatalogVariants } from "../../../lib/analytics/catalog.server";
@@ -583,6 +583,33 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
     const NOW = new Date("2026-11-10T17:00:00Z");
     const RANGE = "range=custom&start=2026-09-15&end=2026-11-09";
 
+    // Created directly in its final state: job states only move forward.
+    async function seedOrderSync(state: "RUNNING" | "SUCCEEDED") {
+      const at = new Date("2026-08-01T01:00:00Z");
+      await migrationPrisma.durableJob.create({
+        data: {
+          shopId: shopAId,
+          jobType: "order-facts-sync",
+          source: "order_facts_sync",
+          queueName: "cron",
+          payloadSchemaVersion: "order-facts-sync-v1",
+          sanitizedPayload: {},
+          payloadDigest: "test-digest",
+          idempotencyKey: `order-facts-sync:${shopAId}:${state}`,
+          correlationId: `corr-${shopAId}-${state}`,
+          authorityVersion: "v1",
+          state,
+          createdAt: at,
+          startedAt: at,
+          completedAt: state === "SUCCEEDED" ? at : null,
+        },
+      });
+    }
+
+    beforeAll(async () => {
+      await seedOrderSync("SUCCEEDED");
+    });
+
     const contextFor = (shopId: string, domain: string, db: TenantDb) =>
       loadReportContext({
         tenant: issueTenantAuthority({
@@ -609,6 +636,51 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
 
     const tiles = (result: Awaited<ReturnType<typeof page>>) =>
       Object.fromEntries(result.table.tiles.map((tile) => [tile.label, tile.value]));
+
+    it("warns on sales reports, and only on those, until the order history is in", async () => {
+      const heading = (result: Awaited<ReturnType<typeof page>>) =>
+        result.notices.map((notice) => notice.heading);
+      try {
+        await migrationPrisma.durableJob.deleteMany({ where: { shopId: shopAId } });
+        expect(heading(await page("best-sellers", RANGE))).toContain(
+          "Your order history has not been imported",
+        );
+        expect(heading(await page("stock-on-hand"))).not.toContain(
+          "Your order history has not been imported",
+        );
+
+        await seedOrderSync("RUNNING");
+        expect(heading(await page("best-sellers", RANGE))).toContain(
+          "Your order history is still being imported",
+        );
+      } finally {
+        await migrationPrisma.durableJob.deleteMany({ where: { shopId: shopAId } });
+        await seedOrderSync("SUCCEEDED");
+      }
+      expect(heading(await page("best-sellers", RANGE))).toEqual([]);
+    });
+
+    it("still shows a sales report when the order history status cannot be read", async () => {
+      const report = findReport("best-sellers");
+      const context = await contextFor(shopAId, SHOP_A_DOMAIN, dbA);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const result = await report?.page(
+          {
+            ...context,
+            orderHistory: async () => {
+              throw new Error("control plane unavailable");
+            },
+          },
+          new URLSearchParams(RANGE),
+        );
+        expect(result?.table.rows.length).toBeGreaterThan(0);
+        expect(result?.notices.map((notice) => notice.heading)).toEqual([]);
+        expect(warn).toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
 
     it("resolves the shop's calendar and currency, and refuses to guess them", async () => {
       expect(await contextFor(shopAId, SHOP_A_DOMAIN, dbA)).toMatchObject({

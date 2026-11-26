@@ -12,6 +12,7 @@ import {
   formatCell,
   formatShopInstant,
   freshnessNote,
+  orderHistoryNotices,
   resolveSort,
   sortRows,
   tablePage,
@@ -387,5 +388,30 @@ describe("freshnessNote", () => {
     expect(freshnessNote("live", "America/New_York")).toBe(
       "Lists the records made in this app as they are now.",
     );
+  });
+});
+
+describe("orderHistoryNotices", () => {
+  it("says nothing once the history is in", () => {
+    expect(orderHistoryNotices("ready")).toEqual([]);
+  });
+
+  it("warns that figures are partial while the history is arriving", () => {
+    const [notice, ...rest] = orderHistoryNotices("importing");
+    expect(rest).toEqual([]);
+    expect(notice).toMatchObject({
+      tone: "warning",
+      heading: "Your order history is still being imported",
+    });
+    expect(notice?.body).toContain("only include the orders imported so far");
+  });
+
+  it("tells the merchant to start a sync when none was ever requested", () => {
+    const [notice] = orderHistoryNotices("not_started");
+    expect(notice).toMatchObject({
+      tone: "warning",
+      heading: "Your order history has not been imported",
+    });
+    expect(notice?.body).toContain("Start a sync");
   });
 });
