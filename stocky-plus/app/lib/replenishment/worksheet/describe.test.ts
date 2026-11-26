@@ -4,6 +4,7 @@ import {
   describeSelection,
   formatInstant,
   formatLocalDate,
+  lineMargin,
   marginAndMarkup,
   revenuePerDay,
 } from "./describe";
@@ -92,5 +93,40 @@ describe("revenuePerDay", () => {
     expect(revenuePerDay("600", null)).toBeNull();
     expect(revenuePerDay("600", 0)).toBeNull();
     expect(revenuePerDay("600", 1.5)).toBeNull();
+  });
+});
+
+describe("lineMargin", () => {
+  const usd = {
+    priceAmount: "20.00",
+    priceCurrencyCode: "USD",
+    unitCostAmount: "12.00",
+    unitCostCurrencyCode: "USD",
+    supplierCostAmount: null,
+    supplierCostCurrencyCode: null,
+  };
+
+  it("uses the Shopify unit cost when no supplier cost is set", () => {
+    expect(lineMargin(usd)).toEqual({ margin: "40.0", markup: "66.7", currenciesDiffer: false });
+  });
+
+  it("prefers the supplier's listed cost over the Shopify cost", () => {
+    expect(
+      lineMargin({ ...usd, supplierCostAmount: "15.00", supplierCostCurrencyCode: "USD" }),
+    ).toEqual({ margin: "25.0", markup: "33.3", currenciesDiffer: false });
+  });
+
+  it("refuses to compare a price and a cost in different currencies", () => {
+    expect(
+      lineMargin({ ...usd, supplierCostAmount: "10.00", supplierCostCurrencyCode: "EUR" }),
+    ).toEqual({ margin: null, markup: null, currenciesDiffer: true });
+  });
+
+  it("has nothing to show without a cost", () => {
+    expect(lineMargin({ ...usd, unitCostAmount: null, unitCostCurrencyCode: null })).toEqual({
+      margin: null,
+      markup: null,
+      currenciesDiffer: false,
+    });
   });
 });
