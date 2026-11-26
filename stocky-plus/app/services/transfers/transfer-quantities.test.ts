@@ -9,6 +9,7 @@ import {
   transferOutstandingQuantity,
   transferShipQuantity,
   transferTotals,
+  transferUnshippedQuantity,
   transferWrittenOffQuantity,
   type TransferLedgerStanding,
   type TransferLineQuantities,
@@ -30,6 +31,41 @@ describe("transfer quantities", () => {
   it("ships what was picked, or everything requested when nothing was picked", () => {
     expect(transferShipQuantity(line())).toBe(10);
     expect(transferShipQuantity(line({ pickedQty: 7 }))).toBe(7);
+  });
+
+  it("ships exactly what was picked, which may be nothing, on a draft that ships in parts", () => {
+    expect(transferShipQuantity(line(), true)).toBe(0);
+    expect(transferShipQuantity(line({ pickedQty: 7 }), true)).toBe(7);
+  });
+
+  it("reads a shipped line's units from what it shows as shipped, whatever is picked for its next shipment", () => {
+    const partShipped = line({ shippedQty: 4, pickedQty: 3 });
+    expect(transferShipQuantity(partShipped)).toBe(4);
+    expect(transferShipQuantity(partShipped, true)).toBe(4);
+    // A line of which nothing has shipped yet says 0, not its whole quantity.
+    expect(transferShipQuantity(line({ shippedQty: 0 }))).toBe(0);
+    // A line shipped before shipments in parts existed keeps the earlier rule.
+    expect(transferShipQuantity(line({ shippedQty: null, pickedQty: 7 }))).toBe(
+      7,
+    );
+  });
+
+  it("knows the units of a shipped line that have not left the source yet", () => {
+    expect(transferUnshippedQuantity(line({ shippedQty: 4 }))).toBe(6);
+    expect(transferUnshippedQuantity(line({ shippedQty: 0 }))).toBe(10);
+    expect(transferUnshippedQuantity(line({ shippedQty: 10 }))).toBe(0);
+    // A draft line, or one shipped under the earlier rule, has none.
+    expect(transferUnshippedQuantity(line())).toBe(0);
+    expect(transferUnshippedQuantity(line({ pickedQty: 7 }))).toBe(0);
+  });
+
+  it("counts only shipped units as outstanding on a transfer that ships in parts", () => {
+    expect(
+      transferOutstandingQuantity(
+        line({ shippedQty: 4, pickedQty: 3, receivedQty: 1 }),
+      ),
+    ).toBe(3);
+    expect(transferOutstandingQuantity(line({ shippedQty: 0 }))).toBe(0);
   });
 
   it("counts a shipped unit as outstanding until it is received, counted in, rejected or returned", () => {
@@ -75,6 +111,8 @@ describe("transfer quantities", () => {
       returnedUnits: 0,
       writtenOffUnits: 0,
       outstandingUnits: 7,
+      toShipUnits: 0,
+      nextShipmentUnits: 0,
     });
     expect(transferTotals("RECEIVED", lines)).toMatchObject({
       writtenOffUnits: 7,
@@ -89,6 +127,40 @@ describe("transfer quantities", () => {
       lineCount: 0,
       shipUnits: 0,
     });
+  });
+
+  it("adds up the units still to ship and the units picked for the next shipment on a transfer that ships in parts", () => {
+    const lines = [
+      line({ shippedQty: 4, pickedQty: 3, receivedQty: 1 }),
+      line({ quantity: 5, shippedQty: 0 }),
+      line({ quantity: 2, shippedQty: 2 }),
+    ];
+    expect(transferTotals("IN_TRANSIT", lines, true)).toMatchObject({
+      requestedUnits: 17,
+      shipUnits: 6,
+      receivedUnits: 1,
+      outstandingUnits: 5,
+      toShipUnits: 11,
+      nextShipmentUnits: 3,
+    });
+    // Once the transfer is closed nothing is still to ship or picked.
+    expect(transferTotals("RECEIVED", lines)).toMatchObject({
+      shipUnits: 6,
+      toShipUnits: 0,
+      nextShipmentUnits: 0,
+      writtenOffUnits: 5,
+    });
+  });
+
+  it("adds up only the picked units as the first shipment of a draft that ships in parts", () => {
+    const lines = [line({ pickedQty: 3 }), line({ quantity: 5 })];
+    expect(transferTotals("DRAFT", lines, true)).toMatchObject({
+      requestedUnits: 15,
+      shipUnits: 3,
+      toShipUnits: 0,
+      nextShipmentUnits: 3,
+    });
+    expect(transferTotals("DRAFT", lines)).toMatchObject({ shipUnits: 8 });
   });
 });
 
@@ -175,6 +247,44 @@ describe("unfinished steps of a transfer", () => {
     ).toBe("RETURN_UNFINISHED");
   });
 
+  it("points at an unfinished later shipment on a transfer that ships in parts", () => {
+    // More out of the source than the lines show as shipped.
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({ ...shipped, unitsOutOfSource: 12, unitsIntoDestination: 4 }),
+        true,
+      ),
+    ).toBe("NEXT_SHIPMENT_UNFINISHED");
+    // A request Shopify is still answering.
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({ ...shipped, shipmentUnfinished: true }),
+        true,
+      ),
+    ).toBe("NEXT_SHIPMENT_UNFINISHED");
+    // Less out of the source than was shipped is still a close that stopped.
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({ ...shipped, unitsOutOfSource: 7 }),
+        true,
+      ),
+    ).toBe("RETURN_UNFINISHED");
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({ ...shipped, unitsIntoDestination: 4 }),
+        true,
+      ),
+    ).toBeNull();
+  });
+
   it("points at a receipt whose units are not all in stock at the destination, or one too many", () => {
     for (const unitsIntoDestination of [0, 3, 5]) {
       expect(
@@ -232,6 +342,10 @@ describe("transfer wording", () => {
     expect(label("IN_TRANSIT")).toBe("In transit");
     expect(label("IN_TRANSIT", { receivedUnits: 1 })).toBe("Partly received");
     expect(label("IN_TRANSIT", { rejectedUnits: 1 })).toBe("Partly received");
+    expect(label("IN_TRANSIT", { toShipUnits: 4 })).toBe("Partly shipped");
+    expect(label("IN_TRANSIT", { toShipUnits: 4, receivedUnits: 1 })).toBe(
+      "Partly received",
+    );
     expect(label("RECEIVED", { receivedUnits: 10 })).toBe("Received");
     expect(label("RECEIVED", { receivedUnits: 9, rejectedUnits: 1 })).toBe(
       "Received with rejects",

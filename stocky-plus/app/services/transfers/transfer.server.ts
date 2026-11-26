@@ -31,13 +31,17 @@ import {
   LINE_NOT_FOUND_MESSAGE,
   loadTransfer,
   lockTransferIn,
+  NO_SHIPMENT_RECORD_MESSAGE,
   NOT_DRAFT_MESSAGE,
+  RETURN_UNFINISHED_MESSAGE,
   settleTransferDocument,
+  SHOPIFY_MANAGED_MESSAGE,
   SWITCHED_OFF_MESSAGE,
   TRANSFER_NOT_FOUND_MESSAGE,
   UNREADABLE_MESSAGE,
   type LineByItem,
   type TransferActionResult,
+  type TransferMovementFailure,
   type TransferMovementResult,
   type TransferWithLines,
 } from "./transfer-core.server";
@@ -47,6 +51,7 @@ import {
   MAX_TRANSFER_LINES,
   MAX_TRANSFER_NOTES_LENGTH,
   transferShipQuantity,
+  transferUnshippedQuantity,
 } from "./transfer-quantities";
 
 export type {
@@ -437,6 +442,92 @@ export async function removeTransferLine(
   });
 }
 
+/**
+ * Say whether a draft ships in one go or in parts. In parts, only the units
+ * entered as picked leave with each shipment and the rest stays on the
+ * transfer to ship later.
+ */
+export async function setTransferShipsInParts(
+  db: TenantDb,
+  input: { transferId: string; shipsInParts: boolean },
+): Promise<TransferActionResult> {
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockTransferIn(tx, input.transferId, "DRAFT"))) {
+      const transfer = await tx.transferOrder.findFirst({
+        where: { id: input.transferId },
+        select: { id: true },
+      });
+      return {
+        ok: false as const,
+        error: transfer
+          ? "Only a draft can be changed between one shipment and several."
+          : TRANSFER_NOT_FOUND_MESSAGE,
+      };
+    }
+    await tx.transferOrder.update({
+      where: { id: input.transferId },
+      data: { shipsInParts: input.shipsInParts },
+      select: { id: true },
+    });
+    return { ok: true as const };
+  });
+}
+
+/**
+ * Under the transfer's lock: set the units of a line that leave with the next
+ * shipment of a transfer in transit that ships in parts.
+ */
+async function pickForNextShipment(
+  tx: TenantDb,
+  input: { lineId: string; pickedQty: number; transferId?: string },
+): Promise<TransferActionResult> {
+  const found = (await tx.transferLineItem.findFirst({
+    where: {
+      id: input.lineId,
+      ...(input.transferId ? { transferOrderId: input.transferId } : {}),
+    },
+    select: { id: true, transferOrderId: true },
+  })) as { id: string; transferOrderId: string } | null;
+  if (!found) return { ok: false, error: LINE_NOT_FOUND_MESSAGE };
+  if (!(await lockTransferIn(tx, found.transferOrderId, "IN_TRANSIT"))) {
+    return { ok: false, error: NOT_DRAFT_MESSAGE };
+  }
+  // Read under the lock: closing the transfer ends its shipments.
+  const transfer = (await tx.transferOrder.findFirst({
+    where: { id: found.transferOrderId },
+    select: { shipsInParts: true, shopifyTransferId: true },
+  })) as { shipsInParts: boolean; shopifyTransferId: string | null } | null;
+  if (!transfer?.shipsInParts) return { ok: false, error: NOT_DRAFT_MESSAGE };
+  if (transfer.shopifyTransferId) {
+    return { ok: false, error: SHOPIFY_MANAGED_MESSAGE };
+  }
+  const line = (await tx.transferLineItem.findFirst({
+    where: { id: found.id },
+    select: { id: true, quantity: true, shippedQty: true },
+  })) as { id: string; quantity: number; shippedQty: number | null } | null;
+  if (!line) return { ok: false, error: LINE_NOT_FOUND_MESSAGE };
+  const unshipped = transferUnshippedQuantity(line);
+  if (input.pickedQty > unshipped) {
+    return {
+      ok: false,
+      error:
+        unshipped === 0
+          ? "Every unit of this item has already shipped."
+          : `Only ${unitsText(unshipped)} of this item ${unshipped === 1 ? "has" : "have"} not shipped yet.`,
+    };
+  }
+  await tx.transferLineItem.update({
+    where: { id: line.id },
+    data: { pickedQty: input.pickedQty },
+  });
+  return { ok: true };
+}
+
+/**
+ * Set the picked units of a line: on a draft, the units that leave when it
+ * ships; on a transfer in transit that ships in parts, the units that leave
+ * with its next shipment.
+ */
 export async function setTransferPickedQuantity(
   db: TenantDb,
   input: { lineId: string; pickedQty: number; transferId?: string },
@@ -449,7 +540,11 @@ export async function setTransferPickedQuantity(
   }
   return db.$transaction(async (tx: TenantDb) => {
     const locked = await lockDraftLine(tx, input);
-    if (!locked.ok) return locked;
+    if (!locked.ok) {
+      return locked.error === NOT_DRAFT_MESSAGE
+        ? pickForNextShipment(tx, input)
+        : locked;
+    }
     if (input.pickedQty > locked.line.quantity) {
       return {
         ok: false as const,
@@ -491,7 +586,9 @@ async function checkStockBeforeShipping(
   leaving: ReadonlyArray<{ inventoryItemId: string; units: number }>,
   lineByItem: LineByItem,
   options: ShipTransferOptions,
-): Promise<TransferMovementResult | null> {
+  /** Where a refusal leaves the transfer. */
+  standing = "the transfer stays a draft",
+): Promise<TransferMovementFailure | null> {
   const read =
     options.readQuantities ??
     (admin ? createAvailableQuantityReader(admin) : null);
@@ -539,7 +636,7 @@ async function checkStockBeforeShipping(
   }
   if (notStocked.length > 0) {
     return fail(
-      "Some items cannot be transferred between these locations yet. Nothing was sent to Shopify and the transfer stays a draft.",
+      `Some items cannot be transferred between these locations yet. Nothing was sent to Shopify and ${standing}.`,
       notStocked,
     );
   }
@@ -655,11 +752,20 @@ export async function shipTransfer(
     const rebuilt = current && (await buildShipmentDocument(tx, current));
     if (!current || !rebuilt || !rebuilt.ok) return "changed";
     if (!(await isSettled(tx, rebuilt.document))) return "changed";
-    // Freeze what shipped on each line; receiving reads it back.
+    // Freeze what shipped on each line; receiving reads it back. A transfer
+    // that ships in parts stays open for the units that did not leave, and
+    // its picked units start again at none for the next shipment. Any other
+    // transfer keeps its shipped units in `pickedQty` too, as it always has.
+    const shippedOf = (line: (typeof current.lineItems)[number]) =>
+      transferShipQuantity(line, current.shipsInParts);
+    const moreToShip =
+      current.shipsInParts &&
+      current.lineItems.some((line) => shippedOf(line) < line.quantity);
     for (const line of current.lineItems) {
+      const shipped = shippedOf(line);
       await tx.transferLineItem.update({
         where: { id: line.id },
-        data: { pickedQty: transferShipQuantity(line) },
+        data: { shippedQty: shipped, pickedQty: moreToShip ? 0 : shipped },
       });
     }
     await tx.transferOrder.update({
@@ -668,6 +774,7 @@ export async function shipTransfer(
         status: "IN_TRANSIT",
         shippedAt,
         shippedByUserId: actor.shopifyUserId,
+        shipsInParts: moreToShip,
       },
     });
     return "shipped";
@@ -694,6 +801,160 @@ export async function shipTransfer(
     );
   }
   return fail(TRANSFER_NOT_FOUND_MESSAGE);
+}
+
+const NOTHING_LEFT_TO_SHIP_MESSAGE =
+  "Nothing on this transfer is waiting to ship.";
+
+export type ShipNextResult =
+  | {
+      ok: true;
+      /** Units this shipment took out of stock at the source. */
+      shippedUnits: number;
+      /** Units of the transfer that have still not shipped. */
+      stillToShipUnits: number;
+    }
+  | TransferMovementFailure;
+
+/**
+ * Ship the next part of a transfer in transit that ships in parts: take the
+ * units picked for it out of the source location.
+ *
+ * The lines move on only when the ledger shows every change applied.
+ * Pressing ship again, twice at once, or after a partial failure sends only
+ * what Shopify has not confirmed yet. With no units picked, stock that an
+ * unfinished shipment took out without it being recorded is put back.
+ */
+export async function shipNextTransferShipment(
+  db: TenantDb,
+  admin: AdminGraphQLClient | null,
+  actor: InventoryActor,
+  transferId: string,
+  options: ShipTransferOptions = {},
+): Promise<ShipNextResult> {
+  const transfer = await loadTransfer(db, transferId);
+  if (!transfer) return fail(TRANSFER_NOT_FOUND_MESSAGE);
+  if (transfer.status === "DRAFT") {
+    return fail("This transfer has not shipped yet. Ship it first.");
+  }
+  if (transfer.status !== "IN_TRANSIT" || !transfer.shipsInParts) {
+    return fail(NOTHING_LEFT_TO_SHIP_MESSAGE);
+  }
+  if (transfer.shopifyTransferId) return fail(SHOPIFY_MANAGED_MESSAGE);
+  if (!isSwitchedOn(options)) return fail(SWITCHED_OFF_MESSAGE);
+
+  // What the transfer shows as shipped has to be out of the source in full
+  // before more leaves. More than that being out is this step, unfinished.
+  const recorded = await buildShipmentDocument(db, transfer);
+  if (!recorded.ok) return fail(recorded.error);
+  const before = await readDocumentLedgerState(db, recorded.document);
+  if (before.operationCount === 0) return fail(NO_SHIPMENT_RECORD_MESSAGE);
+  if (before.outstanding.some((line) => line.delta < 0)) {
+    return fail(RETURN_UNFINISHED_MESSAGE);
+  }
+
+  const built = await buildShipmentDocument(db, transfer, undefined, true);
+  if (!built.ok) return fail(built.error);
+  const state = await readDocumentLedgerState(db, built.document);
+  const picked = transfer.lineItems.reduce(
+    (sum, line) => sum + line.pickedQty,
+    0,
+  );
+  if (
+    picked === 0 &&
+    !state.unfinishedOperationId &&
+    state.outstanding.length === 0
+  ) {
+    return fail(
+      "No units are entered to ship now. Enter the units of at least one item that leave with this shipment.",
+    );
+  }
+  if (!state.unfinishedOperationId) {
+    const blocked = await checkStockBeforeShipping(
+      admin,
+      transfer,
+      state.outstanding
+        .filter((line) => line.delta < 0)
+        .map((line) => ({
+          inventoryItemId: line.inventoryItemId,
+          units: -line.delta,
+        })),
+      built.lineByItem,
+      options,
+      "nothing more is shown as shipped",
+    );
+    if (blocked) return blocked;
+  }
+
+  const settled = await settleTransferDocument(
+    db,
+    admin,
+    actor,
+    built.document,
+    "IN_TRANSIT",
+    options,
+  );
+  if (!settled.ok) return fail(settled.error);
+  if (!settled.settle.settled) {
+    return fail(
+      describeUnsettled(
+        settled.settle,
+        "The units stay picked and nothing more is shown as shipped.",
+      ),
+      describeLineProblems(settled.settle.operation, built.lineByItem),
+    );
+  }
+
+  const outcome = await db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockTransferIn(tx, transfer.id, "IN_TRANSIT"))) {
+      return "not_in_transit" as const;
+    }
+    const current = await loadTransfer(tx, transfer.id);
+    if (!current?.shipsInParts) return "not_in_transit" as const;
+    const rebuilt = await buildShipmentDocument(tx, current, undefined, true);
+    if (!rebuilt.ok || !(await isSettled(tx, rebuilt.document))) {
+      return "changed" as const;
+    }
+    let shippedUnits = 0;
+    let stillToShipUnits = 0;
+    const shippedNow = current.lineItems.map((line) => {
+      const shipped = transferShipQuantity(line, true) + line.pickedQty;
+      shippedUnits += line.pickedQty;
+      stillToShipUnits += line.quantity - shipped;
+      return shipped;
+    });
+    for (const [index, line] of current.lineItems.entries()) {
+      const shipped = shippedNow[index];
+      // Once everything has shipped the transfer is written like one that
+      // shipped in one go: `pickedQty` holds the shipped units.
+      const pickedQty = stillToShipUnits > 0 ? 0 : shipped;
+      if (shipped === line.shippedQty && pickedQty === line.pickedQty) continue;
+      await tx.transferLineItem.update({
+        where: { id: line.id },
+        data: { shippedQty: shipped, pickedQty },
+      });
+    }
+    if (stillToShipUnits === 0) {
+      await tx.transferOrder.update({
+        where: { id: transfer.id },
+        data: { shipsInParts: false },
+        select: { id: true },
+      });
+    }
+    return { shippedUnits, stillToShipUnits };
+  });
+
+  if (outcome === "changed") {
+    return fail(
+      "The units to ship were changed while this shipment was being sent. Ship again to apply the latest quantities.",
+    );
+  }
+  if (outcome === "not_in_transit") {
+    return fail(
+      "This transfer was closed while the shipment was being sent. Reload the page to see where it stands.",
+    );
+  }
+  return { ok: true, ...outcome };
 }
 
 /**

@@ -12,11 +12,14 @@ export interface TransferProgress {
   rejectedUnits: number;
   returnedUnits: number;
   writtenOffUnits: number;
+  /** Units that have not left the source yet, on a transfer in transit that ships in parts. */
+  toShipUnits?: number;
 }
 
 /**
  * How a transfer stands, in the merchant's words. A finished transfer says
- * whether everything arrived; one in transit says whether receiving has begun.
+ * whether everything arrived; one in transit says whether receiving has
+ * begun, or that part of it has still to ship.
  */
 export function transferStatusBadge(
   status: TransferStatus,
@@ -28,8 +31,11 @@ export function transferStatusBadge(
     case "CANCELLED":
       return { label: "Cancelled", tone: "neutral" };
     case "IN_TRANSIT":
-      return progress.receivedUnits + progress.rejectedUnits > 0
-        ? { label: "Partly received", tone: "warning" }
+      if (progress.receivedUnits + progress.rejectedUnits > 0) {
+        return { label: "Partly received", tone: "warning" };
+      }
+      return (progress.toShipUnits ?? 0) > 0
+        ? { label: "Partly shipped", tone: "warning" }
         : { label: "In transit", tone: "warning" };
     case "RECEIVED":
       if (progress.returnedUnits + progress.writtenOffUnits > 0) {

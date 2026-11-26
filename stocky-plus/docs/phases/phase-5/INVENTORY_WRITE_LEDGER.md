@@ -143,6 +143,7 @@ if (result.settled) {
 | ---------------- | ------------------ | ------------------------------------------ | ----------------------- |
 | Stocktake        | `Stocktake`        | counted − expected at the counted location | `cycle_count_available` |
 | Transfer ship    | `TransferShipment` | −shipped units at the source               | `movement_created`      |
+| Transfer more    | `TransferShipment` | −units of a later shipment at the source   | `movement_created`      |
 | Transfer cancel  | `TransferShipment` | puts back whatever a partial ship took out | `movement_canceled`     |
 | Transfer close   | `TransferShipment` | +missing units back at the source          | `movement_canceled`     |
 | Transfer receive | `TransferReceipt`  | +received units at the destination         | `movement_received`     |
@@ -389,7 +390,28 @@ documents above are the record of what moved.
   go below zero. If the quantities cannot be read, nothing is sent. After a
   partial failure only the units that have not left yet are checked again.
   When every change is confirmed the transfer goes in transit and each line's
-  shipped quantity is frozen in `pickedQty`.
+  shipped quantity is frozen in `shippedQty` (and, as before, in `pickedQty`
+  unless the transfer stays open for more shipments).
+- **Several shipments** (PRD 3.12, "multiple shipments"). A draft can be set
+  to ship in several shipments (`TransferOrder.shipsInParts`). Then only the
+  units entered as picked leave with a shipment, a line with none entered
+  sends nothing, and a shipment with no units at all is refused. After the
+  first shipment the transfer is in transit and stays open for the rest:
+  staff enter the units of the next shipment per line (never more than what
+  has not shipped) and ship them, as often as needed. Each shipment settles
+  the same `TransferShipment:<id>` document, now built from the shipped units
+  plus the units picked for the shipment being sent, so a second press, two
+  presses at once and a retry send only what Shopify has not confirmed, and
+  the source is checked only for the units of that shipment. The lines move
+  on (`shippedQty` grows, `pickedQty` returns to 0) only when the ledger
+  shows the whole shipment out. When the last unit has shipped, or the
+  transfer is closed, `shipsInParts` is cleared and `pickedQty` holds the
+  shipped units again, so a finished transfer reads the same whichever way it
+  shipped. Units that never shipped stay in stock at the source when the
+  transfer is closed; nothing is sent to Shopify for them. There is no
+  shipment table: the shipments are the ledger operations of the shipment
+  document, listed in the transfer's history. A transfer that ships in one go
+  behaves exactly as before.
 - **Cancelling** is for drafts. If an interrupted shipment already took stock
   out, cancelling puts it back first; the transfer is cancelled only when the
   ledger shows the source whole again.
@@ -400,8 +422,9 @@ documents above are the record of what moved.
   destination and needs a named staff member; a transfer takes as many
   receipts as it needs. Units counted in while a receipt is being posted are
   kept for the next one. The transfer finishes when every shipped unit is
-  received or rejected. Nothing is added at the destination unless the ledger
-  shows the whole shipment out of the source.
+  received or rejected and, on a transfer that ships in several shipments,
+  nothing is left to ship. Nothing is added at the destination unless the
+  ledger shows exactly the shipped units out of the source.
 - **Rejects.** Units that arrived and are not fit for sale are recorded on
   their line with a reason. They enter stock at neither location and no change
   is sent to Shopify for them.
@@ -418,13 +441,16 @@ documents above are the record of what moved.
 - **Unfinished steps.** The transfer page compares the lines with the ledger
   (`transferAttention`) and says which step did not finish: a shipment partly
   sent, a cancelled transfer whose stock is not all back, a receipt partly
-  posted, a return partly applied, or a transfer in transit that the ledger
-  never saw leave the source. For the last one the app moves no stock at all.
+  posted, a return partly applied, a later shipment that took stock out
+  without the transfer showing it as shipped (ship again to finish it, or
+  close the transfer to put that stock back; nothing is received meanwhile),
+  or a transfer in transit that the ledger never saw leave the source. For
+  the last one the app moves no stock at all.
 - **History and report.** The page lists the transfer's ledger operations:
   what left, arrived and went back, who did it, and whether Shopify confirmed
   or refused it. The transfer report exports one row per item as CSV with
   requested, shipped, received, counted-in, rejected, returned, written-off
-  and outstanding units.
+  and outstanding units, and, as the last column, the units not shipped yet.
 - **Papers.** Two PDFs print from the transfer page
   (`transfer-documents.server.ts`, routes `…/document` and `…/pick-list`).
   The pick list exists while the transfer is a draft: the items in SKU order

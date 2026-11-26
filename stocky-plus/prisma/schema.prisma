@@ -790,6 +790,10 @@ model TransferOrder {
   shortResolution       TransferShortResolution?
   cancelledAt           DateTime?
   cancelledByUserId     String?                  @db.VarChar(64)
+  /// The transfer leaves the source in several shipments: units that have not
+  /// shipped yet stay on it and ship later. Set on a draft by the staff
+  /// member; cleared when every unit has shipped or the transfer is closed.
+  shipsInParts          Boolean                  @default(false)
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
 
@@ -808,8 +812,13 @@ model TransferLineItem {
   /// Units asked for on the draft.
   quantity          Int
   /// On a draft, the units picked so far (0 ships the whole quantity). Once
-  /// shipped, the units that left the source.
+  /// shipped, the units that left the source. On a transfer that ships in
+  /// parts it is the units picked for the next shipment, 0 meaning none.
   pickedQty         Int     @default(0)
+  /// Units that left the source, over every shipment. Null on a draft, and on
+  /// a line shipped before shipments in parts existed: `pickedQty` holds its
+  /// shipped units.
+  shippedQty        Int?
   /// Units Shopify has confirmed in stock at the destination.
   receivedQty       Int     @default(0)
   /// Units counted in at the destination and not posted to Shopify yet.

@@ -64,6 +64,7 @@ const ALL_MIGRATION_NAMES = [
   "20261120030000_stocktake_difference_value",
   "20261120040000_stocktake_recount",
   "20261125140000_stocktake_recount_history",
+  "20261126060000_transfer_shipments_in_parts",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);

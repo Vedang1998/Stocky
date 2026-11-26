@@ -68,6 +68,7 @@ const header = (extra: Partial<TransferHeader> = {}): TransferHeader => ({
   notes: null,
   shopifyTransferId: null,
   shortResolution: null,
+  shipsInParts: false,
   createdAt: new Date("2026-11-10T20:45:00Z"),
   createdByUserId: "42",
   shippedAt: null,
@@ -101,6 +102,7 @@ const line = (extra: Partial<TransferLineView> = {}): TransferLineView => ({
   shipQty: 6,
   outstandingQty: 0,
   writtenOffQty: 0,
+  toShipQty: 0,
   ...extra,
 });
 
@@ -119,7 +121,7 @@ function paper(
   lines: TransferLineView[],
   extra: Partial<TransferPaper> = {},
 ): TransferPaper {
-  const totals = transferTotals(transfer.status, lines);
+  const totals = transferTotals(transfer.status, lines, transfer.shipsInParts);
   return {
     reference: "T-ABC123",
     transfer,
@@ -292,6 +294,28 @@ describe("Transfer document", () => {
     expect(text).not.toContain("Sent");
     expect(text).toContain("5");
     expect(text.filter((part) => part.startsWith("Shipped"))).toEqual([]);
+  });
+
+  it("says what ships now and what ships later on a transfer that ships in several shipments", () => {
+    const draft = transferText(
+      paper(header({ shipsInParts: true }), [
+        line({ pickedQty: 2, shipQty: 2 }),
+        line({ ...WHITE, shipQty: 0 }),
+      ]),
+    );
+    expect(draft).toContain(
+      "Cellar & Co · Draft · 2 items, 2 units to send now, 8 to ship later",
+    );
+
+    const sent = transferText(
+      paper(header({ ...SHIPPED, shipsInParts: true }), [
+        line({ shippedQty: 2, shipQty: 2, receivedQty: 1, toShipQty: 4 }),
+        line({ ...WHITE, shippedQty: 0, shipQty: 0, toShipQty: 4 }),
+      ]),
+    );
+    expect(sent).toContain(
+      "Cellar & Co · Partly received · 2 items, 2 units sent so far, 8 still to ship, 1 already counted at the destination",
+    );
   });
 
   it("says how much of a transfer in transit the destination has already counted", () => {

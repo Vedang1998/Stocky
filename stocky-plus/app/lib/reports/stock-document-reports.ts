@@ -14,6 +14,7 @@ import type {
   TransferStatus,
 } from "../analytics/stock-documents.server";
 import type { StockLocation } from "../analytics/stock-levels.server";
+import { transferShipQuantity } from "../../services/transfers/transfer-quantities";
 import { countOf, formatCell } from "./present";
 import { IDENTITY_SEARCH_KEYS, identityColumns } from "./sales-reports";
 import { unitCostIn } from "./stock-reports";
@@ -67,10 +68,14 @@ export type TransfersInput = {
   timeZone: string;
 };
 
-/** What left the source: the picked quantity, or all of it when nothing was picked. */
+/**
+ * What left the source. A transfer may ship in several shipments, so a line
+ * says what has shipped so far; a line shipped before that was possible keeps
+ * the picked quantity, or all of it when nothing was picked.
+ */
 function shippedUnitsOf(line: TransferLine): number | null {
   if (line.status !== "IN_TRANSIT" && line.status !== "RECEIVED") return null;
-  return line.pickedQty > 0 ? line.pickedQty : line.quantity;
+  return transferShipQuantity(line);
 }
 
 /** One row per line of every transfer created in the range. */

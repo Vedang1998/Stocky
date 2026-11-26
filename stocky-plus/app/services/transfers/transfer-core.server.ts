@@ -51,6 +51,8 @@ export interface TransferWithLines {
   destinationLocationId: string;
   status: TransferStatus;
   shopifyTransferId: string | null;
+  /** Units that have not shipped yet stay on the transfer and ship later. */
+  shipsInParts: boolean;
   lineItems: TransferLine[];
 }
 
@@ -73,6 +75,12 @@ export const TRANSFER_NOT_FOUND_MESSAGE = "Transfer not found";
 export const LINE_NOT_FOUND_MESSAGE = "Transfer line not found";
 export const NOT_DRAFT_MESSAGE =
   "This transfer has already been shipped or cancelled. Its lines can no longer be changed.";
+export const NO_SHIPMENT_RECORD_MESSAGE =
+  "ProPo has no complete record of this transfer leaving the source location, so it will not add stock at the destination.";
+export const RETURN_UNFINISHED_MESSAGE =
+  "Closing this transfer was started and part of its stock is already back at the source, so nothing more can be received. Close the transfer again to finish.";
+export const NEXT_SHIPMENT_UNFINISHED_MESSAGE =
+  "The last shipment of this transfer did not finish: stock left the source that the transfer does not show as shipped yet. Ship the picked units again, or close the transfer to put that stock back.";
 export const NOT_IN_TRANSIT_MESSAGE =
   "Only a transfer that is in transit can be received.";
 export const SWITCHED_OFF_MESSAGE =
@@ -258,14 +266,17 @@ async function buildLegDocument(
 
 /**
  * What a transfer has taken out of the source: the shipped units of every
- * line, less the units that went back there. `returning` gives the units of
- * each line a close-short is about to put back; without it the units each
- * line already records as returned are used.
+ * line, less the units that went back there. On a draft the shipped units are
+ * the ones its first shipment takes. `returning` gives the units of each line
+ * a close-short is about to put back; without it the units each line already
+ * records as returned are used. `withNextShipment` adds the units picked for
+ * the next shipment of a transfer in transit that ships in parts.
  */
 export async function buildShipmentDocument(
   db: TenantDb,
   transfer: TransferWithLines,
   returning?: (line: TransferLine) => number,
+  withNextShipment = false,
 ): Promise<BuiltDocument> {
   const built = await buildLegDocument(
     db,
@@ -273,11 +284,20 @@ export async function buildShipmentDocument(
     "shipment",
     returning ? "movement_canceled" : "movement_created",
     (line) =>
-      transferShipQuantity(line) -
+      transferShipQuantity(line, transfer.shipsInParts) +
+      (withNextShipment && transfer.status === "IN_TRANSIT"
+        ? line.pickedQty
+        : 0) -
       (returning ? returning(line) : line.returnedQty),
   );
   if (built.ok && built.document.desired.length === 0 && !returning) {
-    return { ok: false, error: "Transfer has no line items" };
+    return {
+      ok: false,
+      error:
+        transfer.lineItems.length > 0 && transfer.shipsInParts
+          ? "No units are entered to ship now. Enter the units of at least one item that leave with this shipment."
+          : "Transfer has no line items",
+    };
   }
   return built;
 }

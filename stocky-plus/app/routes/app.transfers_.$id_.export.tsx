@@ -40,6 +40,8 @@ const headers = (timeZone: string | null) => [
   "Returned to source",
   "Written off",
   "Still to account for",
+  // Added last, so the columns before it keep their places.
+  "Not shipped yet",
 ];
 
 /**
@@ -73,7 +75,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const destination = locationName(transfer.destinationLocationId);
   const status = transferStatusBadge(
     transfer.status,
-    transferTotals(transfer.status, lines),
+    transferTotals(transfer.status, lines, transfer.shipsInParts),
   ).label;
 
   const rows: CsvCell[][] = lines.map((line) => [
@@ -96,6 +98,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     line.returnedQty,
     line.writtenOffQty,
     line.outstandingQty,
+    line.toShipQty,
   ]);
 
   const day = shopDay(transfer.createdAt, timeZone);

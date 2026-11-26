@@ -39,8 +39,10 @@ const {
     addTransferItems: vi.fn(),
     setTransferLineQuantity: vi.fn(),
     setTransferPickedQuantity: vi.fn(),
+    setTransferShipsInParts: vi.fn(),
     removeTransferLine: vi.fn(),
     shipTransfer: vi.fn(),
+    shipNextTransferShipment: vi.fn(),
     cancelTransfer: vi.fn(),
   },
   receiving: {
@@ -203,6 +205,8 @@ const CHANGES: Array<Record<string, string>> = [
   { intent: "remove", lineId: "line-1" },
   { intent: "ship" },
   { intent: "ship", allowShortSource: "1" },
+  { intent: "shipsInParts", value: "1" },
+  { intent: "shipNext" },
   { intent: "cancel" },
   { intent: "scan", code: "RED-750" },
   { intent: "countIn", lineId: "line-1", quantity: "3" },
@@ -228,6 +232,7 @@ const header = (extra: Partial<TransferHeader> = {}): TransferHeader => ({
   notes: null,
   shopifyTransferId: null,
   shortResolution: null,
+  shipsInParts: false,
   createdAt: new Date("2026-11-12T09:00:00.000Z"),
   createdByUserId: "42",
   shippedAt: null,
@@ -261,6 +266,7 @@ const line = (extra: Partial<TransferLineView> = {}): TransferLineView => ({
   shipQty: 10,
   outstandingQty: 0,
   writtenOffQty: 0,
+  toShipQty: 0,
   ...extra,
 });
 
@@ -278,6 +284,27 @@ function shippedLine(extra: Partial<TransferLineView> = {}): TransferLineView {
     ...("outstandingQty" in extra
       ? { outstandingQty: extra.outstandingQty! }
       : {}),
+  };
+}
+
+/**
+ * A line of a transfer in transit that ships in parts: `shippedQty` of its
+ * ten units have left the source and the rest is still to ship.
+ */
+function partShippedLine(
+  extra: Partial<TransferLineView> & { shippedQty: number },
+): TransferLineView {
+  const base = line(extra);
+  return {
+    ...base,
+    shipQty: extra.shippedQty,
+    toShipQty: base.quantity - extra.shippedQty,
+    outstandingQty:
+      extra.shippedQty -
+      base.receivedQty -
+      base.pendingReceiveQty -
+      base.rejectedQty -
+      base.returnedQty,
   };
 }
 
@@ -313,7 +340,7 @@ function given(
     total: lines.length,
     page: 1,
     pageCount: 1,
-    totals: transferTotals(status, lines),
+    totals: transferTotals(status, lines, transfer.shipsInParts ?? false),
   });
   reads.getTransferHistory.mockResolvedValue(history);
   reads.listTransferLinesForExport.mockResolvedValue(lines);
@@ -1170,6 +1197,123 @@ describe("Transfer page action", () => {
     });
   });
 
+  describe("shipping in several shipments", () => {
+    it("switches a draft to several shipments and back", async () => {
+      drafts.setTransferShipsInParts.mockResolvedValue({ ok: true });
+
+      expect(await act({ intent: "shipsInParts", value: "1" })).toEqual({
+        ok: true,
+        notice:
+          "This transfer now ships in several shipments. Enter the units that leave with the first one.",
+      });
+      expect(drafts.setTransferShipsInParts).toHaveBeenLastCalledWith(
+        context.db,
+        { transferId: ID, shipsInParts: true },
+      );
+
+      expect(await act({ intent: "shipsInParts", value: "0" })).toEqual({
+        ok: true,
+        notice: "This transfer now ships in one shipment.",
+      });
+      expect(drafts.setTransferShipsInParts).toHaveBeenLastCalledWith(
+        context.db,
+        { transferId: ID, shipsInParts: false },
+      );
+    });
+
+    it("shows why the way a transfer ships could not be changed", async () => {
+      drafts.setTransferShipsInParts.mockResolvedValue({
+        ok: false,
+        error: "Only a draft can be changed between one shipment and several.",
+      });
+
+      expect(await act({ intent: "shipsInParts", value: "1" })).toEqual({
+        error: "Only a draft can be changed between one shipment and several.",
+      });
+    });
+
+    it("confirms the next shipment and says what is still to ship", async () => {
+      drafts.shipNextTransferShipment.mockResolvedValue({
+        ok: true,
+        shippedUnits: 3,
+        stillToShipUnits: 1,
+      });
+
+      expect(await act({ intent: "shipNext" })).toEqual({
+        ok: true,
+        notice:
+          "Shipment sent: 3 units left the source location in Shopify. 1 unit still to ship.",
+      });
+      expect(drafts.shipNextTransferShipment).toHaveBeenLastCalledWith(
+        context.db,
+        context.admin,
+        STAFF,
+        ID,
+        { allowShortSource: false },
+      );
+    });
+
+    it("says when the last units have shipped", async () => {
+      drafts.shipNextTransferShipment.mockResolvedValue({
+        ok: true,
+        shippedUnits: 6,
+        stillToShipUnits: 0,
+      });
+
+      expect(await act({ intent: "shipNext" })).toEqual({
+        ok: true,
+        notice:
+          "Shipment sent: 6 units left the source location in Shopify. Every unit of this transfer has now shipped.",
+      });
+    });
+
+    it("says when an unfinished shipment was put back because no units were entered", async () => {
+      drafts.shipNextTransferShipment.mockResolvedValue({
+        ok: true,
+        shippedUnits: 0,
+        stillToShipUnits: 6,
+      });
+
+      expect(await act({ intent: "shipNext" })).toEqual({
+        ok: true,
+        notice:
+          "No units were entered to ship, so stock that had left the source without being shown as shipped was put back. 6 units still to ship.",
+      });
+    });
+
+    it("hands back a short source and ships below zero only when that was confirmed", async () => {
+      const refusal = {
+        ok: false,
+        error: "The source location does not have enough stock for every item.",
+        problems: [
+          {
+            shopifyVariantId: "gid://shopify/ProductVariant/1",
+            title: "Red wine",
+            message:
+              "Shopify shows 1 available at the source; the transfer takes 3 units.",
+          },
+        ],
+        blocker: "SOURCE_SHORT",
+      };
+      drafts.shipNextTransferShipment.mockResolvedValue(refusal);
+
+      expect(await act({ intent: "shipNext" })).toEqual({
+        error: refusal.error,
+        problems: refusal.problems,
+        blocker: "SOURCE_SHORT",
+      });
+
+      await act({ intent: "shipNext", allowShortSource: "1" });
+      expect(drafts.shipNextTransferShipment).toHaveBeenLastCalledWith(
+        context.db,
+        context.admin,
+        STAFF,
+        ID,
+        { allowShortSource: true },
+      );
+    });
+  });
+
   describe("cancel", () => {
     it("cancels a draft as the signed-in staff member", async () => {
       drafts.cancelTransfer.mockResolvedValue({ ok: true, alreadyDone: false });
@@ -1902,6 +2046,207 @@ describe("Transfer page", () => {
     expect(page.formKeyHandlers.size).toBe(0);
   });
 
+  describe("several shipments", () => {
+    it("offers a draft that ships in one go to ship in several shipments", async () => {
+      const html = await renderDetail();
+
+      expect(html).toContain("Picked to ship");
+      expect(html).not.toContain("Ship now");
+      expect(html).toContain("Ship in several shipments");
+      expect(html).toContain('name="intent" value="shipsInParts"');
+      expect(html).toContain('name="value" value="1"');
+      expect(submitDisabled(html, "shipsInParts")).toBe(false);
+    });
+
+    it("shows a draft that ships in parts with only its picked units leaving now", async () => {
+      given({ shipsInParts: true }, [
+        line({ pickedQty: 4 }),
+        line({ id: "line-2", title: "White wine", sku: null, barcode: null }),
+      ]);
+
+      const html = await renderDetail();
+
+      expect(html).toContain("2 items, 4 units to ship now, 16 later");
+      expect(html).toContain("Ship now");
+      expect(html).not.toContain("Picked to ship");
+      // The field shows what is picked: 4, and nothing for the other item.
+      expect(html).toMatch(
+        /<s-number-field[^>]*name="pickedQty"[^>]*value="4"/,
+      );
+      expect(html).toMatch(
+        /<s-number-field[^>]*name="pickedQty"[^>]*value="0"/,
+      );
+      expect(html).toContain(
+        "Only the units saved under Ship now leave with the first shipment.",
+      );
+      expect(html).toContain("Ship 4 units now");
+      expect(html).toContain("Takes 4 units out of stock at Warehouse");
+      expect(html).toContain(
+        "The other 16 units stay on the transfer to ship later.",
+      );
+      expect(submitDisabled(html, "ship")).toBe(false);
+      expect(html).toContain("Ship everything in one shipment instead");
+      expect(html).toContain('name="value" value="0"');
+    });
+
+    it("keeps a draft that ships in parts from shipping while nothing is picked", async () => {
+      given({ shipsInParts: true }, [line()]);
+
+      const html = await renderDetail();
+
+      expect(html).toContain("Ship 0 units now");
+      expect(submitDisabled(html, "ship")).toBe(true);
+      // Going back to one shipment stays possible.
+      expect(submitDisabled(html, "shipsInParts")).toBe(false);
+    });
+
+    it("shows what has shipped and what is still to ship, and takes the units of the next shipment", async () => {
+      inTransit(
+        [
+          partShippedLine({ shippedQty: 4, pickedQty: 3, receivedQty: 1 }),
+          partShippedLine({
+            id: "line-2",
+            title: "White wine",
+            sku: null,
+            barcode: null,
+            shippedQty: 10,
+          }),
+        ],
+        undefined,
+        { shipsInParts: true },
+      );
+
+      const html = await renderDetail();
+
+      expect(html).toContain("Partly received");
+      expect(html).toContain(
+        "First shipment 2026-11-12 10:00 UTC by staff ID 42",
+      );
+      expect(html).toContain(
+        "2 items, 14 units shipped · 6 still to ship · 1 received",
+      );
+      expect(html).toContain("Still to ship");
+      expect(html).toContain("Ship now");
+      // Only the item with units left to ship has a field, limited to them.
+      expect(html.match(/name="pickedQty"/g)).toHaveLength(1);
+      expect(html).toMatch(
+        /<s-number-field[^>]*label="Units of Red wine to ship now"[^>]*name="pickedQty"[^>]*value="3"[^>]*max="6"/,
+      );
+      expect(html).toContain('heading="Ship the next shipment"');
+      expect(html).toContain("Ship 3 units now");
+      expect(html).toContain("6 units of this transfer have not shipped yet.");
+      expect(submitDisabled(html, "shipNext")).toBe(false);
+      expect(html).toContain(
+        "If the rest will not ship, close the transfer below: units that did not ship stay in stock at Warehouse.",
+      );
+      // Receiving goes on next to it.
+      expect(html).toContain('heading="Receive items"');
+      expect(page.formKeyHandlers.get("pick")).toBe(submitOnEnter);
+    });
+
+    it("says a transfer of which nothing is received yet is partly shipped", async () => {
+      inTransit([partShippedLine({ shippedQty: 4 })], undefined, {
+        shipsInParts: true,
+      });
+
+      const html = await renderDetail();
+
+      expect(html).toContain("Partly shipped");
+      expect(html).toContain("Ship 0 units now");
+      expect(submitDisabled(html, "shipNext")).toBe(true);
+      expect(html).toContain(
+        "adds it to stock at Shop floor in Shopify. The transfer stays open for the units still to ship.",
+      );
+    });
+
+    it("keeps the next shipment unavailable while stock changes are switched off, but not entering its units", async () => {
+      isInventoryWriteEnabled.mockReturnValue(false);
+      inTransit([partShippedLine({ shippedQty: 4, pickedQty: 3 })], undefined, {
+        shipsInParts: true,
+      });
+
+      const html = await renderDetail();
+
+      expect(submitDisabled(html, "shipNext")).toBe(true);
+      expect(submitDisabled(html, "pick")).toBe(false);
+    });
+
+    it("offers to ship below zero on the next shipment only after the source was found short", async () => {
+      inTransit([partShippedLine({ shippedQty: 4, pickedQty: 3 })], undefined, {
+        shipsInParts: true,
+      });
+
+      expect(await renderDetail()).not.toContain("Ship anyway");
+
+      const html = await renderDetail({
+        error: "The source location does not have enough stock for every item.",
+        problems: [],
+        blocker: "SOURCE_SHORT",
+      });
+      expect(html).toContain("Ship anyway");
+      expect(html).toMatch(
+        /name="intent" value="shipNext"\/><input type="hidden" name="allowShortSource" value="1"\/>/,
+      );
+    });
+
+    it("says what closing does to the units that did not ship", async () => {
+      // Everything that shipped is received; six units never left.
+      inTransit(
+        [partShippedLine({ shippedQty: 4, receivedQty: 4 })],
+        undefined,
+        { shipsInParts: true },
+      );
+
+      const html = await renderDetail();
+
+      expect(html).toContain("Finish transfer");
+      expect(html).toContain(
+        "Every shipped unit is received or rejected. 6 units that did not ship stay in stock at Warehouse and can no longer ship on this transfer.",
+      );
+    });
+
+    it("says when a later shipment did not finish, and offers to finish it or to close", async () => {
+      const lines = [partShippedLine({ shippedQty: 4 })];
+      inTransit(
+        lines,
+        [
+          event({ netUnits: -4 }),
+          event({
+            operationId: "op-2",
+            netUnits: -2,
+            status: "PARTIALLY_APPLIED",
+          }),
+        ],
+        { shipsInParts: true },
+      );
+
+      const html = await renderDetail();
+
+      expect((await loadDetail()).attention).toBe("NEXT_SHIPMENT_UNFINISHED");
+      expect(html).toContain(
+        'heading="The last shipment of this transfer did not finish"',
+      );
+      expect(html).toContain("Finish the shipment");
+      expect(submitDisabled(html, "shipNext")).toBe(false);
+      expect(html).toContain('heading="Close the transfer"');
+      // Nothing is received until the source is in line with the transfer.
+      expect(html).not.toContain('heading="Receive items"');
+      expect(html).not.toContain('heading="Post the receipt"');
+    });
+
+    it("shows no shipment fields on a transfer in transit that shipped in one go", async () => {
+      inTransit([shippedLine()]);
+
+      const html = await renderDetail();
+
+      expect(html).not.toContain("Still to ship");
+      expect(html).not.toContain("Ship now");
+      expect(html).not.toContain('heading="Ship the next shipment"');
+      expect(html).toContain("Shipped 2026-11-12 10:00 UTC by staff ID 42");
+      expect(html).not.toContain("First shipment");
+    });
+  });
+
   it("shows a received transfer read-only", async () => {
     given(
       {
@@ -2133,12 +2478,29 @@ describe("Transfer report export", () => {
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(head).toBe(
-      'Transfer,From,To,Status,Created at (UTC),Shipped at (UTC),Received or closed at (UTC),Item,SKU,Barcode,Requested,Shipped,Received,"Counted in, not posted",Rejected,Reject reason,Returned to source,Written off,Still to account for',
+      'Transfer,From,To,Status,Created at (UTC),Shipped at (UTC),Received or closed at (UTC),Item,SKU,Barcode,Requested,Shipped,Received,"Counted in, not posted",Rejected,Reject reason,Returned to source,Written off,Still to account for,Not shipped yet',
     );
     expect(rows).toEqual([
-      "T-ABC123,Warehouse,Shop floor,Partly received,2026-11-12T09:00:00.000Z,2026-11-12T10:00:00.000Z,,Red wine,RED-750,1111,10,10,3,2,0,,0,0,5",
-      'T-ABC123,Warehouse,Shop floor,Partly received,2026-11-12T09:00:00.000Z,2026-11-12T10:00:00.000Z,,White wine,,,10,10,0,0,1,"Broken, wet",0,0,9',
+      "T-ABC123,Warehouse,Shop floor,Partly received,2026-11-12T09:00:00.000Z,2026-11-12T10:00:00.000Z,,Red wine,RED-750,1111,10,10,3,2,0,,0,0,5,0",
+      'T-ABC123,Warehouse,Shop floor,Partly received,2026-11-12T09:00:00.000Z,2026-11-12T10:00:00.000Z,,White wine,,,10,10,0,0,1,"Broken, wet",0,0,9,0',
     ]);
+  });
+
+  it("says in the last column how many units of an item have not shipped yet", async () => {
+    inTransit(
+      [partShippedLine({ shippedQty: 4, pickedQty: 0, receivedQty: 1 })],
+      undefined,
+      { shipsInParts: true },
+    );
+
+    const [head, row] = (await (await exportTransfer()).text())
+      .trimEnd()
+      .split("\r\n");
+
+    expect(head.endsWith(",Still to account for,Not shipped yet")).toBe(true);
+    expect(row).toBe(
+      "T-ABC123,Warehouse,Shop floor,Partly received,2026-11-12T09:00:00.000Z,2026-11-12T10:00:00.000Z,,Red wine,RED-750,1111,10,4,1,0,0,,0,0,3,6",
+    );
   });
 
   it("neutralises spreadsheet formulas in names and reasons", async () => {
@@ -2435,7 +2797,7 @@ describe("Transfer times on the shop's clock", () => {
     );
     expect(head).not.toContain("UTC");
     expect(row).toBe(
-      "T-ABC123,Warehouse,Shop floor,In transit,2026-11-12 21:30,2026-11-13 10:05,,Red wine,RED-750,1111,10,10,0,0,0,,0,0,10",
+      "T-ABC123,Warehouse,Shop floor,In transit,2026-11-12 21:30,2026-11-13 10:05,,Red wine,RED-750,1111,10,10,0,0,0,,0,0,10,0",
     );
   });
 
