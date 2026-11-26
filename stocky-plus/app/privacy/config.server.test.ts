@@ -5,13 +5,13 @@ import {
 } from "./config.server";
 
 describe("privacy configuration", () => {
-  it("keeps uninstalled shops for 30 days unless configured", () => {
-    expect(resolveUninstalledRetentionDays({})).toBe(30);
+  it("keeps uninstalled shops for 28 days unless configured", () => {
+    expect(resolveUninstalledRetentionDays({})).toBe(28);
     expect(
       resolveUninstalledRetentionDays({
         PRIVACY_UNINSTALLED_RETENTION_DAYS: " ",
       }),
-    ).toBe(30);
+    ).toBe(28);
     expect(
       resolveUninstalledRetentionDays({
         PRIVACY_UNINSTALLED_RETENTION_DAYS: "7",
@@ -19,9 +19,19 @@ describe("privacy configuration", () => {
     ).toBe(7);
     expect(
       resolveUninstalledRetentionDays({
-        PRIVACY_UNINSTALLED_RETENTION_DAYS: "365",
+        PRIVACY_UNINSTALLED_RETENTION_DAYS: "28",
       }),
-    ).toBe(365);
+    ).toBe(28);
+  });
+
+  it("never keeps an uninstalled shop past Shopify's 30-day deletion limit", () => {
+    for (const value of ["29", "30", "31", "90", "365"]) {
+      expect(() =>
+        resolveUninstalledRetentionDays({
+          PRIVACY_UNINSTALLED_RETENTION_DAYS: value,
+        }),
+      ).toThrow(/from 1 to 28/);
+    }
   });
 
   it("refuses a retention value it cannot honour instead of falling back", () => {

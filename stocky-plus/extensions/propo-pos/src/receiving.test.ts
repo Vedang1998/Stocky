@@ -247,6 +247,12 @@ describe("requests", () => {
     expect((result as { status?: number }).status).toBeUndefined();
   });
 
+  it("treats a server error on submit as an unconfirmed receipt, with no status", async () => {
+    const result = await submitReceipt(respond(500), 401, "po", { idempotencyKey: "k", lines: [] });
+    expect(result).toMatchObject({ ok: false, message: RECEIVING_MESSAGES.submitUnsure });
+    expect((result as { status?: number }).status).toBeUndefined();
+  });
+
   it("passes on the app's error code for a reused key with other counts", async () => {
     const result = await submitReceipt(
       respond(409, { error: { code: "different_counts", message: "Already submitted." } }),

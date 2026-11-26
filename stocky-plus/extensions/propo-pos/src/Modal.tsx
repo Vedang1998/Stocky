@@ -1,5 +1,6 @@
 import { render } from "preact";
 import { useState } from "preact/hooks";
+import { Count } from "./Count";
 import { Receive } from "./Receive";
 import { StockLookup } from "./StockLookup";
 
@@ -7,7 +8,7 @@ export default async () => {
   render(<ProPo />, document.body);
 };
 
-type Screen = "menu" | "lookup" | "receive";
+type Screen = "menu" | "lookup" | "receive" | "count";
 
 function ProPo() {
   const [screen, setScreen] = useState<Screen>("menu");
@@ -15,6 +16,7 @@ function ProPo() {
 
   if (screen === "lookup") return <StockLookup onBack={back} />;
   if (screen === "receive") return <Receive onBack={back} />;
+  if (screen === "count") return <Count onBack={back} />;
 
   return (
     <s-page heading="ProPo">
@@ -27,6 +29,7 @@ function ProPo() {
             <s-button onClick={() => setScreen("receive")}>
               Receive a delivery
             </s-button>
+            <s-button onClick={() => setScreen("count")}>Count stock</s-button>
           </s-stack>
         </s-box>
       </s-scroll-box>

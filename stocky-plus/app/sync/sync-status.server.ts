@@ -96,3 +96,61 @@ export async function readCatalogSyncStatus(
     };
   });
 }
+
+/** The job that imports a shop's order history, and later keeps it current. */
+const ORDER_FACTS_SYNC_JOB_TYPE = "order-facts-sync";
+
+/**
+ * Whether the shop's order history is in. Sales reports read it, so they say
+ * when it is still arriving instead of showing a partial picture as complete.
+ *
+ * - `importing`: an order sync is queued or running and none has finished yet.
+ * - `ready`: an order sync has finished since the shop was installed or last
+ *   reinstalled. A reinstall erases the imported orders, so a success from
+ *   before it does not count. A later re-sync does not make the history
+ *   "importing" again: the figures were already complete.
+ * - `not_started`: no sync is queued and none has finished since then (none was
+ *   requested, or every attempt ended in failure).
+ */
+export type OrderHistoryStatus = "importing" | "ready" | "not_started";
+
+export async function readOrderHistoryStatus(
+  authority: TenantAuthority,
+): Promise<OrderHistoryStatus> {
+  assertTenantAuthority(authority);
+  const prisma = getControlPlanePrisma();
+  const shopId = authority.shopId;
+
+  const shop = await prisma.shop.findUnique({
+    where: { id: shopId },
+    select: { createdAt: true, reinstalledAt: true },
+  });
+  if (!shop) return "not_started";
+  // The same rule enqueueOrderFactsSync uses for the install-time import.
+  const importsSince =
+    shop.reinstalledAt && shop.reinstalledAt > shop.createdAt
+      ? shop.reinstalledAt
+      : shop.createdAt;
+
+  const [succeeded, unfinished] = await Promise.all([
+    prisma.durableJob.findFirst({
+      where: {
+        shopId,
+        jobType: ORDER_FACTS_SYNC_JOB_TYPE,
+        state: "SUCCEEDED",
+        createdAt: { gte: importsSince },
+      },
+      select: { id: true },
+    }),
+    prisma.durableJob.findFirst({
+      where: {
+        shopId,
+        jobType: ORDER_FACTS_SYNC_JOB_TYPE,
+        state: { in: [...UNFINISHED_JOB_STATES] },
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (succeeded) return "ready";
+  return unfinished ? "importing" : "not_started";
+}

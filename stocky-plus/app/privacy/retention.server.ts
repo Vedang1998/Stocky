@@ -45,7 +45,7 @@ export async function openRetentionErasureRequests(
 
   const shops = await prisma.shop.findMany({
     where: expired,
-    select: { id: true, myshopifyDomain: true },
+    select: { id: true, myshopifyDomain: true, uninstalledAt: true },
     orderBy: { uninstalledAt: "asc" },
     take: SHOPS_PER_SWEEP,
   });
@@ -64,6 +64,8 @@ export async function openRetentionErasureRequests(
         data: { processingDisabledReason: "REDACTED" },
       });
       if (marked.count === 0) return 0;
+      // Shopify's deletion deadline runs from the uninstall, not from this sweep.
+      const uninstalledAt = shop.uninstalledAt ?? now;
       await tx.privacyRequest.create({
         data: {
           topic: "SHOP_REDACT",
@@ -71,7 +73,9 @@ export async function openRetentionErasureRequests(
           shopDomain: shop.myshopifyDomain,
           shopRecordId: shop.id,
           receivedAt: now,
-          dueAt: new Date(now.getTime() + PRIVACY_REQUEST_DUE_DAYS * DAY_MS),
+          dueAt: new Date(
+            uninstalledAt.getTime() + PRIVACY_REQUEST_DUE_DAYS * DAY_MS,
+          ),
           nextAttemptAt: now,
         },
       });

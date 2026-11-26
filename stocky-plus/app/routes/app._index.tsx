@@ -19,6 +19,11 @@ import { buildSyncStatusView } from "../lib/sync-status";
 import { useRevalidateWhile } from "../lib/use-revalidate-while";
 import { readCatalogSyncStatus } from "../sync/sync-status.server";
 import { planSummary } from "../billing/plan-display";
+import {
+  requireActivePlanSnapshot,
+  snapshotAllowsChanges,
+} from "../billing/entitlements.server";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
@@ -26,10 +31,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const [settings, alerts, openPOs, supplierCount, cachedVariants] =
     await Promise.all([
-      db.shopSettings.upsert({
+      // Read only: the afterAuth hook creates the row, and a page load must
+      // not write (TEN-02).
+      db.shopSettings.findUnique({
         where: { shop },
-        create: { shop },
-        update: {},
+        select: { subscriptionActive: true, subscriptionPlan: true },
       }),
       getLowStockAlerts(db),
       // The same orders as the Open view of the purchase-order list.
@@ -49,6 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     plan: planSummary(settings),
+    planActive: snapshotAllowsChanges(settings),
     alerts: alerts.slice(0, 10),
     openPOs,
     supplierCount,
@@ -68,6 +75,8 @@ const SYNC_REFRESH = { intervalMs: 5000, maxMs: 15 * 60 * 1000 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
+  // Every action here starts work or changes a record (SEC-18).
+  await requireActivePlanSnapshot(db);
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
@@ -82,8 +91,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "ackAlert") {
+    const alertId = form.get("alertId");
+    if (typeof alertId !== "string" || alertId === "") return { ok: false };
     await db.lowStockAlert.updateMany({
-      where: { id: form.get("alertId") as string },
+      where: { id: alertId },
       data: { acknowledged: true },
     });
     return { ok: true };
@@ -95,6 +106,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Dashboard() {
   const {
     plan,
+    planActive,
     alerts,
     openPOs,
     supplierCount,
@@ -113,11 +125,12 @@ export default function Dashboard() {
 
   return (
     <s-page heading="Home">
+      {!planActive && <PlanRequiredBanner records="Your ProPo records" />}
       {syncStatus.attention && (
         <SyncAttentionBanner attention={syncStatus.attention} />
       )}
       {!setupGuide.complete && (
-        <SetupGuide guide={setupGuide} syncing={syncing} />
+        <SetupGuide guide={setupGuide} syncing={syncing} locked={!planActive} />
       )}
 
       <s-section heading="Overview">
@@ -165,7 +178,11 @@ export default function Dashboard() {
                     <Form method="post">
                       <input type="hidden" name="intent" value="ackAlert" />
                       <input type="hidden" name="alertId" value={alert.id} />
-                      <s-button type="submit" variant="tertiary">
+                      <s-button
+                        type="submit"
+                        variant="tertiary"
+                        {...(planActive ? {} : { disabled: true })}
+                      >
                         Acknowledge
                       </s-button>
                     </Form>
@@ -177,7 +194,12 @@ export default function Dashboard() {
         </s-section>
       )}
 
-      <SyncStatus status={syncStatus} now={now} submitting={syncing} />
+      <SyncStatus
+        status={syncStatus}
+        now={now}
+        submitting={syncing}
+        locked={!planActive}
+      />
 
       <s-section slot="aside" heading="Quick links">
         <s-unordered-list>
