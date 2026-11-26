@@ -1,7 +1,11 @@
 import { UNSAFE_ErrorResponseImpl as ErrorResponseImpl } from "react-router";
 import { describe, expect, it } from "vitest";
 
-import { describeRouteError, isShopifyAuthFlowResponse } from "./route-error";
+import {
+  REINSTALL_PENDING_MESSAGE,
+  describeRouteError,
+  isShopifyAuthFlowResponse,
+} from "./route-error";
 
 const response = (status: number, data: unknown, internal = false) =>
   new ErrorResponseImpl(status, "", data, internal);
@@ -83,5 +87,19 @@ describe("describeRouteError", () => {
 
   it("keeps the upstream status for gateway errors", () => {
     expect(describeRouteError(response(503, "")).status).toBe(503);
+  });
+
+  it("asks for a reload while a reinstalled shop is being switched back on", () => {
+    expect(describeRouteError(response(503, REINSTALL_PENDING_MESSAGE))).toEqual({
+      status: 503,
+      title: "Almost ready",
+      message: REINSTALL_PENDING_MESSAGE,
+    });
+  });
+
+  it("shows no other 503 body", () => {
+    const view = describeRouteError(response(503, "Redis connection refused"));
+    expect(view.title).toBe("Something went wrong");
+    expect(view.message).not.toMatch(/Redis/);
   });
 });
