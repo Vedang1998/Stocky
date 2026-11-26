@@ -17,9 +17,13 @@ import {
   loadPartnerApiConfig,
   partnerApiSubscriptionSource,
 } from "./partner-subscription-source.server";
+import {
+  devPlanOverride,
+  devPlanOverrideSource,
+} from "./dev-plan-override.server";
 
 export interface SubscriptionSource {
-  readonly kind: "admin_api" | "partner_api";
+  readonly kind: "admin_api" | "partner_api" | "dev_override";
   listSubscriptions(): Promise<SubscriptionRecord[]>;
 }
 
@@ -173,12 +177,16 @@ let warnedAboutAdminSource = false;
 /**
  * The source for one shop. `admin` must be the authenticated shop's own
  * client: the Partner API is asked about the shop that client reports, never
- * about one named by a request.
+ * about one named by a request. In development and test only, a plan named
+ * by STOCKY_DEV_PLAN_OVERRIDE replaces both (dev-plan-override.server.ts).
  */
 export function subscriptionSourceFor(
   admin: AdminGraphQLClient,
   env: NodeJS.ProcessEnv = process.env,
 ): SubscriptionSource {
+  const override = devPlanOverride(env);
+  if (override) return devPlanOverrideSource(override);
+
   const config = loadPartnerApiConfig(env);
   if (config) {
     return partnerApiSubscriptionSource({

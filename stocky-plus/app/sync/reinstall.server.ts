@@ -100,6 +100,10 @@ export async function reactivateShopAfterVerifiedReinstall(input: {
       processingEnabled: true,
       processingDisabledReason: null,
       processingDisabledAt: null,
+      // The shop is installed again: an uninstall time on the row always
+      // means "uninstalled now" (the retention sweep and the dispatcher read
+      // it that way).
+      uninstalledAt: null,
       reinstalledAt: new Date(),
     },
   });

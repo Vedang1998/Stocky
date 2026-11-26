@@ -1,6 +1,7 @@
 import { Form } from "react-router";
 import { formatAge } from "../lib/stock-format";
 import type { SyncAttention, SyncStatusView } from "../lib/sync-status";
+import { SYNC_CATALOG_LABEL } from "../lib/sync-copy";
 
 /** Shown at the top of Home when the last sync failed or is incomplete. */
 export function SyncAttentionBanner({ attention }: { attention: SyncAttention }) {
@@ -21,11 +22,14 @@ export function SyncStatus({
   status,
   now,
   submitting,
+  locked,
 }: {
   status: SyncStatusView;
   now: number;
   /** The sync request itself is being sent. */
   submitting: boolean;
+  /** No active plan: the server refuses a sync started from here (SEC-18). */
+  locked: boolean;
 }) {
   return (
     <s-section slot="aside" heading="Shopify sync">
@@ -44,7 +48,9 @@ export function SyncStatus({
         <s-text color="subdued">
           {status.inProgress
             ? "ProPo is copying your catalog from Shopify. This updates on its own; a large catalog can take several minutes."
-            : "Changes in Shopify arrive on their own. Sync again if something looks out of date."}
+            : locked
+              ? "Changes in Shopify arrive on their own. Starting a sync from here needs an active plan."
+              : "Changes in Shopify arrive on their own. Sync again if something looks out of date."}
         </s-text>
         <Form method="post">
           <input type="hidden" name="intent" value="syncCatalog" />
@@ -53,9 +59,9 @@ export function SyncStatus({
             type="submit"
             variant="primary"
             {...(submitting ? { loading: true } : {})}
-            {...(status.inProgress ? { disabled: true } : {})}
+            {...(status.inProgress || locked ? { disabled: true } : {})}
           >
-            {status.inProgress ? "Sync in progress" : "Sync catalog"}
+            {status.inProgress ? "Sync in progress" : SYNC_CATALOG_LABEL}
           </s-button>
         </Form>
       </s-stack>

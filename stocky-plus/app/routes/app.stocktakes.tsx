@@ -17,7 +17,10 @@ import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { requireAdminTenantWithActor } from "../services/inventory-writes/actor.server";
+import {
+  requireAdminTenantWithActor,
+  STAFF_REQUIRED_MESSAGE,
+} from "../services/inventory-writes/actor.server";
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
@@ -35,6 +38,7 @@ import {
   STOCKTAKE_SCOPE_LABEL,
   STOCKTAKE_STATUS_BADGE,
 } from "../services/stocktakes/stocktake-display";
+import { SYNC_CATALOG_HINT } from "../lib/sync-copy";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { db, tenant } = await requireAdminTenant({ request });
@@ -87,6 +91,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     scope: text(form.get("scope")),
     blind: text(form.get("blind")),
   };
+  // Refused with what was entered, so the form is not emptied.
+  if (!actor) return { error: STAFF_REQUIRED_MESSAGE, values };
   const result = await createStocktake(db, admin, {
     shop: tenant.myshopifyDomain,
     locationId: readFormId(values.locationId),
@@ -154,8 +160,8 @@ export default function Stocktakes() {
       <s-section heading="Start a count">
         {activeLocations.length === 0 ? (
           <s-paragraph>
-            No active locations are synced yet. Run a sync from the dashboard,
-            then start a count.
+            No active locations are synced yet. {SYNC_CATALOG_HINT}, then
+            start a count.
           </s-paragraph>
         ) : (
           <Form method="post" onKeyDown={onEnter}>

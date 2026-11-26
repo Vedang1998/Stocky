@@ -30,8 +30,16 @@ off. More units than an order expects are refused unless staff turn on
 "Accept more than ordered". Each submission carries a key, so retrying after a
 dropped connection records the delivery once.
 
-Looking up stock and browsing orders change nothing. Receiving is the only
-write in this extension.
+**Count stock.** Staff pick a stocktake that is being counted at the POS
+location and scan items; each scan adds one unit to that item's count (the
+item joins the count if Shopify stocks it at the location). Counts can be
+adjusted with the plus and minus buttons, typed, or cleared. Every count names
+the staff member and needs a signed-in staff user. Expected quantities are
+never sent to POS, whether or not the count is blind. Stocktakes are started,
+reviewed and completed in the admin; completing is what changes stock.
+
+Looking up stock and browsing orders change nothing. Receiving changes stock
+in Shopify; counting changes only the stocktake until it is completed.
 
 ## How it talks to the app
 
@@ -46,6 +54,9 @@ later):
 | `GET /api/pos/receiving?location=&search=` | Purchase orders on their way to the POS location |
 | `GET /api/pos/receiving/:id?location=` | The lines of one order and how many units each still expects |
 | `POST /api/pos/receiving/:id?location=` | Receive a delivery (JSON body: `idempotencyKey`, `lines`, `allowOverReceipt`) |
+| `GET /api/pos/stocktakes?location=` | Stocktakes being counted at the POS location |
+| `GET /api/pos/stocktakes/:id?location=` | Progress and the items counted so far |
+| `POST /api/pos/stocktakes/:id?location=` | `{intent: "scan", code, quantity}` adds units; `{intent: "count", lineId, countedQty}` sets or clears one count |
 
 Server side, `app/tenant/require-pos-tenant.server.ts` verifies the token
 (signature, expiry, audience), resolves the shop from the token's `dest`,

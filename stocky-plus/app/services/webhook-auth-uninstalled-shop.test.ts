@@ -69,6 +69,7 @@ function delivery(input: {
   body?: string;
   hmac?: string | null;
   method?: string;
+  triggeredAt?: string;
 }): Request {
   const body = input.body ?? JSON.stringify({ shop_domain: SHOP });
   const headers = new Headers({
@@ -80,6 +81,7 @@ function delivery(input: {
   });
   const hmac = input.hmac === undefined ? sign(body) : input.hmac;
   if (hmac !== null) headers.set("x-shopify-hmac-sha256", hmac);
+  if (input.triggeredAt) headers.set("x-shopify-triggered-at", input.triggeredAt);
 
   const method = input.method ?? "POST";
   return new Request(`https://app.example/webhooks/${input.topic}`, {
@@ -143,10 +145,27 @@ describe("webhook authentication for an uninstalled shop (#83)", () => {
       webhookId: "b54557e4-bdd9-4b37-8a5f-bf7d70bcd043",
       apiVersion: API_VERSION,
       payload: { id: 1, myshopify_domain: SHOP },
+      triggeredAt: null,
     });
     expect(loadSession).not.toHaveBeenCalled();
     expect(storeSession).not.toHaveBeenCalled();
     expect(outboundFetch).not.toHaveBeenCalled();
+  });
+
+  // The time Shopify raised the event lets an uninstall that arrives after a
+  // reinstall be told apart (attack round 8, SEC-23).
+  it("passes on the time Shopify triggered the uninstall", async () => {
+    const triggeredAt = "2026-11-25T10:00:00.123Z";
+    const body = JSON.stringify({ id: 1, myshopify_domain: SHOP });
+
+    const response = await uninstalledAction(
+      routeArgs(delivery({ topic: "app/uninstalled", body, triggeredAt })),
+    );
+
+    expect(response.status).toBe(200);
+    expect(processUninstall).toHaveBeenCalledWith(
+      expect.objectContaining({ verifiedShop: SHOP, triggeredAt }),
+    );
   });
 
   // Shopify signs the body, not the shop header: a correctly signed body

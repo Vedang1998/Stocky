@@ -10,6 +10,8 @@ import {
 import { formatDecimal } from "../lib/decimal-format";
 import { serializeDecimals } from "../lib/decimal-wire.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 
 type Component = {
   id: string;
@@ -21,7 +23,7 @@ type Variant = { shopifyVariantId: string; title: string };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { db } = await requireAdminTenant({ request });
-  const [components, variants] = await Promise.all([
+  const [components, variants, planActive] = await Promise.all([
     db.bomComponent.findMany({
       where: {},
       orderBy: { bundleVariantId: "asc" },
@@ -33,8 +35,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       take: 250,
       select: { shopifyVariantId: true, title: true },
     }) as Promise<Variant[]>,
+    planAllowsChanges(db),
   ]);
-  return serializeDecimals({ components, variants });
+  return { ...serializeDecimals({ components, variants }), planActive };
 };
 
 type ActionResult = { ok: true } | { ok: false; errors: BundleComponentErrors };
@@ -87,7 +90,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionRes
 };
 
 export default function Bundles() {
-  const { components, variants } = useLoaderData<typeof loader>();
+  const { components, variants, planActive } = useLoaderData<typeof loader>();
   const result = useActionData<typeof action>();
   const errors = result && !result.ok ? result.errors : {};
 
@@ -103,10 +106,11 @@ export default function Bundles() {
 
   return (
     <s-page heading="Bundles / Bill of Materials">
+      {!planActive && <PlanRequiredBanner records="Bundles" />}
       <s-section heading="Map a component">
         <s-paragraph>
-          When a bundle sells, the sales history of each mapped component is increased by the
-          quantity set here.
+          When a bundle sells, each of its components is counted as sold too,
+          in the quantity set here.
         </s-paragraph>
         <Form method="post">
           <input type="hidden" name="intent" value="add" />
@@ -143,7 +147,11 @@ export default function Bundles() {
               step={0.0001}
               error={errors.quantity}
             />
-            <s-button type="submit" variant="primary">
+            <s-button
+              type="submit"
+              variant="primary"
+              {...(planActive ? {} : { disabled: true })}
+            >
               Add component
             </s-button>
           </s-stack>
@@ -167,7 +175,12 @@ export default function Bundles() {
                     <Form method="post">
                       <input type="hidden" name="intent" value="delete" />
                       <input type="hidden" name="id" value={part.id} />
-                      <s-button type="submit" tone="critical" variant="tertiary">
+                      <s-button
+                        type="submit"
+                        tone="critical"
+                        variant="tertiary"
+                        {...(planActive ? {} : { disabled: true })}
+                      >
                         Remove
                       </s-button>
                     </Form>

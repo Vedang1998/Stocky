@@ -5,6 +5,7 @@
  * drive the on-screen table, sorting, filtering and the CSV export, so a number
  * can never be computed one way on screen and another way in a download.
  */
+import type { OrderHistoryStatus } from "../../sync/sync-status.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import type { Decimal } from "../analytics/money";
 import type { LocalDate } from "../analytics/shop-calendar";
@@ -72,6 +73,8 @@ export type ReportContext = {
   timeZone: string;
   currencyCode: string;
   installedAt: Date;
+  /** Whether the order history that sales reports read has been imported; read once, on first call. */
+  orderHistory: () => Promise<OrderHistoryStatus>;
   /** Shop-local date of the request. */
   today: LocalDate;
   now: Date;
@@ -107,6 +110,8 @@ export type ReportDefinition<Row> = {
   description: string;
   group: ReportGroup;
   usesDateRange: boolean;
+  /** Reads imported order history, so it warns while that is missing or arriving. */
+  usesOrderHistory?: boolean;
   /** Range shown until the merchant picks one; the last 30 complete days when unset. */
   defaultRangePreset?: string;
   options: readonly ReportOption[];

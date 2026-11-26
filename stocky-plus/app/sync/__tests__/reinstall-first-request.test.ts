@@ -4,6 +4,10 @@
  * the database while the shop was still disabled by the uninstall, so tenant
  * reads came back empty and the home loader's ShopSettings upsert was refused
  * by row-level security.
+ *
+ * TEN-02: when the hook does not re-enable the shop within the wait, the
+ * request answers a 503 asking for a reload instead of going on with the shop
+ * disabled, and the home loader no longer writes.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
@@ -11,6 +15,7 @@ import { Session } from "@shopify/shopify-api";
 import { runAfterAuthTenantBootstrap } from "../../tenant/after-auth.server";
 import { requireAdminTenant } from "../../tenant/require-admin-tenant.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
+import { REINSTALL_PENDING_MESSAGE } from "../../lib/route-error";
 
 const SHOP = "reinstall-first-request.myshopify.com";
 const FAST_WAIT = { timeoutMs: 3_000, pollMs: 25 };
@@ -42,13 +47,15 @@ async function homeLoader(wait = FAST_WAIT) {
     authenticateAdmin,
     reinstallWait: wait,
   });
-  const settings = await db.shopSettings.upsert({
+  const settings = await db.shopSettings.findUnique({
     where: { shop: tenant.myshopifyDomain },
-    create: { shop: tenant.myshopifyDomain, shopId: tenant.shopId },
-    update: {},
+    select: { shop: true },
   });
   const suppliers = await db.supplier.findMany({ select: { name: true } });
-  return { settings, suppliers: suppliers.map((s: { name: string }) => s.name) };
+  return {
+    settings,
+    suppliers: suppliers.map((s: { name: string }) => s.name),
+  };
 }
 
 describe("first request after a reinstall (#123)", () => {
@@ -103,7 +110,7 @@ describe("first request after a reinstall (#123)", () => {
 
     const page = await loading;
     expect(page.suppliers).toEqual(["North Mill"]);
-    expect(page.settings.shop).toBe(SHOP);
+    expect(page.settings?.shop).toBe(SHOP);
   });
 
   it("renders when the hook and the loaders start together", async () => {
@@ -121,21 +128,30 @@ describe("first request after a reinstall (#123)", () => {
     }
   });
 
-  it("does not switch an uninstalled shop back on by itself", async () => {
+  it("asks for a reload, and does not switch an uninstalled shop back on, when the wait runs out", async () => {
     // A request that authenticated with a session stored before the
-    // uninstall, with no reinstall behind it.
+    // uninstall, with no reinstall behind it, or a hook slower than the wait.
     const shop = await uninstalledShop();
     const started = Date.now();
 
-    const { db } = await requireAdminTenant({
+    const refused = await requireAdminTenant({
       request: adminRequest(),
       authenticateAdmin,
       reinstallWait: { timeoutMs: 300, pollMs: 25 },
-    });
+    }).then(
+      () => null,
+      (thrown: unknown) => thrown,
+    );
 
     expect(Date.now() - started).toBeGreaterThanOrEqual(300);
-    expect(await db.supplier.findMany()).toEqual([]);
-    const after = await prisma.shop.findUniqueOrThrow({ where: { id: shop.id } });
+    expect(refused).toBeInstanceOf(Response);
+    const response = refused as Response;
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("5");
+    expect(await response.text()).toBe(REINSTALL_PENDING_MESSAGE);
+    const after = await prisma.shop.findUniqueOrThrow({
+      where: { id: shop.id },
+    });
     expect(after.processingEnabled).toBe(false);
     expect(after.processingDisabledReason).toBe("UNINSTALLED");
   });

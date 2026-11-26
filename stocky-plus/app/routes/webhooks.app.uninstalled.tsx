@@ -24,6 +24,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     webhookId: webhookId ?? null,
     apiVersion,
     payload,
+    // Lets an uninstall that arrives after a reinstall be told apart.
+    triggeredAt: request.headers.get("X-Shopify-Triggered-At"),
   });
 
   return new Response();

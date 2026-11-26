@@ -37,6 +37,11 @@ import {
   refundNode,
 } from "../../../app/lib/order-facts/admin-read/__tests__/fixtures";
 import { nominatedReceipt } from "../../../app/lib/order-facts/sync/apply-nominated";
+import { asApplyDb } from "../../../app/lib/order-facts/sync/apply-composition";
+import {
+  abandonActiveObservation,
+  beginDirectOrderObservation,
+} from "../../../app/lib/order-facts/sync/observations";
 import {
   importParentContentDigest,
   importReceiptApplicationKey,
@@ -114,6 +119,30 @@ describe("PR6-D SC-02 reordered recovery and mutation rejection", () => {
       shopAId,
       `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
       [gid],
+    );
+  }
+
+  /** One import step over a bulk export that holds exactly this order. */
+  function importOneOrder(
+    admin: ReturnType<typeof createOrderFactsAdmin>,
+    gid: string,
+    jobId: string,
+  ) {
+    return withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: jobId,
+        correlationId: jobId,
+        jsonlSource: jsonlLines([
+          bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+      }),
     );
   }
 
@@ -543,23 +572,9 @@ describe("PR6-D SC-02 reordered recovery and mutation rejection", () => {
       }),
     });
     const admin = createOrderFactsAdmin({ stores: { [gid]: store } });
+    const runImport = () => importOneOrder(admin, gid, "import-sc02-wh");
     const [imported, webhook] = await Promise.all([
-      withTxnHost(shopAId, (db) =>
-        runOrderFactsImportStep({
-          db,
-          admin,
-          shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
-          shopId: shopAId,
-          durableJobId: "import-sc02-wh",
-          correlationId: "import-sc02-wh",
-          jsonlSource: jsonlLines([
-            bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0 }),
-          ]),
-          pollBulkOperation: false,
-          expectedObjectCount: "1",
-          expectedRootObjectCount: "1",
-        }),
-      ),
+      runImport(),
       withTxnHost(shopAId, (db) =>
         processOrderFactsWebhookJob({
           db,
@@ -577,8 +592,58 @@ describe("PR6-D SC-02 reordered recovery and mutation rejection", () => {
         reason: error instanceof Error ? error.message : String(error),
       })),
     ]);
-    expect(imported.status).toBe("SUCCEEDED");
     expect(webhook.status === "applied" || webhook.status === "threw" || webhook.status === "already_applied" || webhook.status === "incomplete" || webhook.status === "first_confirmation_pending" || webhook.status === "blocked" || webhook.status === "noop").toBe(true);
+    // Which side reaches the order first is a matter of timing. When the
+    // webhook's read is still open, the import is held back for that order and
+    // stops without writing; that is the only reason it may stop here, and the
+    // same step run again, now that the webhook has finished, must complete.
+    let settled = imported;
+    if (imported.status !== "SUCCEEDED") {
+      expect(imported.reason, JSON.stringify(imported)).toContain(
+        "blocked:active_blocker",
+      );
+      settled = await runImport();
+    }
+    expect(settled.status, JSON.stringify({ imported, webhook, settled })).toBe(
+      "SUCCEEDED",
+    );
+    expect(await factCount(gid)).toBe(1);
+  });
+
+  it("holds an import back while another read of the same order is open, and completes exactly once when run again", async () => {
+    const gid = "gid://shopify/Order/sc02-held";
+    const admin = createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } });
+    const runImport = () => importOneOrder(admin, gid, "import-sc02-held");
+    // The state a webhook leaves while it is between opening its read of the
+    // order and writing the result: an active, unexpired observation.
+    const open = await withTxnHost(shopAId, (db) =>
+      db.$transaction((tx) =>
+        beginDirectOrderObservation(asApplyDb(tx), {
+          shopId: shopAId,
+          resourceKind: "Order",
+          shopifyGid: gid,
+        }),
+      ),
+    );
+    const held = await runImport();
+    expect(held, JSON.stringify(held)).toMatchObject({
+      status: "PARTIAL_FAILURE",
+      reason: expect.stringContaining("blocked:active_blocker"),
+    });
+    expect(await factCount(gid)).toBe(0);
+
+    await withTxnHost(shopAId, (db) =>
+      db.$transaction((tx) =>
+        abandonActiveObservation(asApplyDb(tx), {
+          shopId: shopAId,
+          token: open.token,
+          requestGen: open.requestGen,
+          failureCode: "test_reader_finished",
+        }),
+      ),
+    );
+    const again = await runImport();
+    expect(again.status, JSON.stringify(again)).toBe("SUCCEEDED");
     expect(await factCount(gid)).toBe(1);
   });
 

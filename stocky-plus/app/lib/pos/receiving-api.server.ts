@@ -138,12 +138,15 @@ function toApiError(error: unknown): never {
 }
 
 /** The numeric POS location ID as a Shopify GID, required to receive. */
-export function requireReceivingLocation(location: string | null): string {
+export function requireReceivingLocation(
+  location: string | null,
+  action: "receiving" | "counting" = "receiving",
+): string {
   if (location === null) {
     throw new PosApiError(
       400,
       "bad_request",
-      "Choose a location in POS before receiving.",
+      `Choose a location in POS before ${action}.`,
     );
   }
   return location;

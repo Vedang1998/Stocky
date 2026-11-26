@@ -19,6 +19,7 @@ import {
 import { denyConflictingClientShop } from "./client-shop.server";
 import { TenantAuthorityError } from "./errors";
 import { createTenantDb, type TenantDb } from "./tenant-db.server";
+import { REINSTALL_PENDING_MESSAGE } from "../lib/route-error";
 
 type AdminAuthResult = Awaited<
   ReturnType<
@@ -67,14 +68,14 @@ export const REINSTALL_WAIT = { timeoutMs: 5_000, pollMs: 100 } as const;
  * It does not re-enable the shop itself. A request that authenticated with a
  * session stored before the uninstall (the webhook deletes sessions only
  * after it has disabled the shop) must not switch a shop back on that is
- * actually uninstalled: its data would then never be erased. If the hook
- * does not finish in time, the request goes on with the shop disabled, as
- * before.
+ * actually uninstalled: its data would then never be erased.
+ *
+ * Returns false when the shop is still disabled at the deadline.
  */
 async function waitForReinstall(
   shop: CanonicalShopIdentity,
   wait: { timeoutMs: number; pollMs: number },
-): Promise<void> {
+): Promise<boolean> {
   const deadline = Date.now() + wait.timeoutMs;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, wait.pollMs));
@@ -87,9 +88,25 @@ async function waitForReinstall(
       state.processingEnabled !== false ||
       state.processingDisabledReason !== "UNINSTALLED"
     ) {
-      return;
+      return true;
     }
   }
+  return false;
+}
+
+/**
+ * A page that went on with the shop still disabled would show an empty store
+ * and fail on its first write (TEN-02), so the request stops with a 503 that
+ * the error page shows as "reload in a moment".
+ */
+function reinstallPending(): Response {
+  return new Response(REINSTALL_PENDING_MESSAGE, {
+    status: 503,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Retry-After": "5",
+    },
+  });
 }
 
 /**
@@ -133,7 +150,11 @@ export async function requireAdminTenant(
     found.processingEnabled === false &&
     found.processingDisabledReason === "UNINSTALLED"
   ) {
-    await waitForReinstall(shop, input.reinstallWait ?? REINSTALL_WAIT);
+    const enabled = await waitForReinstall(
+      shop,
+      input.reinstallWait ?? REINSTALL_WAIT,
+    );
+    if (!enabled) throw reinstallPending();
   }
 
   const tenant = issueTenantAuthority({

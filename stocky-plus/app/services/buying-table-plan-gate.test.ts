@@ -103,7 +103,8 @@ describe("Buying Table plan gate", () => {
   it("keeps the development activation reachable without a plan", async () => {
     db.shopSettings.findUnique.mockResolvedValue(null);
     const result = await post({ intent: "devActivate" });
-    expect(result).toMatchObject({ error: expect.stringContaining("disabled") });
+    expect(result).toEqual({ error: "This action isn't available." });
     expect(db.shopSettings.findUnique).not.toHaveBeenCalled();
+    expect(db.shopSettings.upsert).not.toHaveBeenCalled();
   });
 });
