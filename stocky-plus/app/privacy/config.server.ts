@@ -21,16 +21,32 @@ export function resolveUninstalledRetentionDays(
   const raw = env.PRIVACY_UNINSTALLED_RETENTION_DAYS?.trim();
   if (!raw) return MAX_RETENTION_DAYS;
   const days = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
-  if (
-    !Number.isSafeInteger(days) ||
-    days < MIN_RETENTION_DAYS ||
-    days > MAX_RETENTION_DAYS
-  ) {
+  if (!isAllowedRetentionDays(days)) {
     throw new Error(
       `PRIVACY_UNINSTALLED_RETENTION_DAYS must be a whole number from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, got "${raw}"`,
     );
   }
   return days;
+}
+
+function isAllowedRetentionDays(days: number): boolean {
+  return (
+    Number.isSafeInteger(days) &&
+    days >= MIN_RETENTION_DAYS &&
+    days <= MAX_RETENTION_DAYS
+  );
+}
+
+/**
+ * The same limit for callers that pass the window directly, so no path can
+ * keep an uninstalled shop's data past Shopify's 30 days.
+ */
+export function assertRetentionDays(days: number): void {
+  if (!isAllowedRetentionDays(days)) {
+    throw new RangeError(
+      `Retention must be a whole number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, got ${days}`,
+    );
+  }
 }
 
 /** How often the worker looks for privacy work. 0 turns the loop off. */

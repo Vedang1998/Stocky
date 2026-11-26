@@ -234,7 +234,11 @@ describe("privacy compliance", () => {
       payload: {
         shop_id: 954889,
         shop_domain: SHOP_A,
-        customer: { id: 191167, email: "john@example.com", phone: "555-625-1199" },
+        customer: {
+          id: 191167,
+          email: "john@example.com",
+          phone: "555-625-1199",
+        },
         orders_to_redact: [299938, 280263, 220458],
       },
     });
@@ -246,7 +250,11 @@ describe("privacy compliance", () => {
         shop_id: 954889,
         shop_domain: SHOP_A,
         orders_requested: [299938, 280263],
-        customer: { id: 191167, email: "john@example.com", phone: "555-625-1199" },
+        customer: {
+          id: 191167,
+          email: "john@example.com",
+          phone: "555-625-1199",
+        },
         data_request: { id: 9999 },
       },
     });
@@ -279,7 +287,12 @@ describe("privacy compliance", () => {
     const stored = JSON.stringify(rows, (_key, value) =>
       typeof value === "bigint" ? value.toString() : value,
     );
-    for (const detail of ["john@example.com", "555-625-1199", "191167", "299938"]) {
+    for (const detail of [
+      "john@example.com",
+      "555-625-1199",
+      "191167",
+      "299938",
+    ]) {
       expect(stored).not.toContain(detail);
     }
   });
@@ -328,7 +341,7 @@ describe("privacy compliance", () => {
     const recorded = await shopRedact(SHOP_A, "shop-redact-a");
     expect(recorded.resolution).toBeNull();
     const summary = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       deps: realDeps,
     });
 
@@ -360,13 +373,13 @@ describe("privacy compliance", () => {
     await seedShop(SHOP_A);
     await uninstall(SHOP_A);
     await shopRedact(SHOP_A, "shop-redact-first");
-    await runPrivacyMaintenance({ retentionDays: 30, deps: realDeps });
+    await runPrivacyMaintenance({ retentionDays: 28, deps: realDeps });
 
     // Same domain installed again: a new shop row with new data.
     const reinstalled = await seedShop(SHOP_A);
     const before = await rowsByTable(reinstalled);
     const late = await shopRedact(SHOP_A, "shop-redact-late");
-    await runPrivacyMaintenance({ retentionDays: 30, deps: realDeps });
+    await runPrivacyMaintenance({ retentionDays: 28, deps: realDeps });
 
     const request = await prisma.privacyRequest.findUniqueOrThrow({
       where: { id: late.requestId },
@@ -388,7 +401,7 @@ describe("privacy compliance", () => {
     });
 
     const recorded = await shopRedact(SHOP_A, "shop-redact-unknown");
-    await runPrivacyMaintenance({ retentionDays: 30, deps: realDeps });
+    await runPrivacyMaintenance({ retentionDays: 28, deps: realDeps });
 
     const request = await prisma.privacyRequest.findUniqueOrThrow({
       where: { id: recorded.requestId },
@@ -407,7 +420,7 @@ describe("privacy compliance", () => {
     // recorded, and a reading taken before that would find nothing to do.
     const now = new Date();
     const first = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       deps: realDeps,
       now,
     });
@@ -418,11 +431,13 @@ describe("privacy compliance", () => {
     });
     expect(waiting.resolution).toBeNull();
     expect(waiting.lastErrorCode).toBe("shop_not_uninstalled");
-    expect(waiting.nextAttemptAt.getTime()).toBe(now.getTime() + 6 * 60 * 60_000);
+    expect(waiting.nextAttemptAt.getTime()).toBe(
+      now.getTime() + 6 * 60 * 60_000,
+    );
     expect(await rowsByTable(shopA)).toEqual(before);
 
     const atDeadline = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       deps: realDeps,
       now: waiting.dueAt,
     });
@@ -447,13 +462,13 @@ describe("privacy compliance", () => {
 
     // app/uninstalled was missed, so shop/redact finds the shop installed.
     const recorded = await shopRedact(SHOP_A, "shop-redact-before-uninstall");
-    await runPrivacyMaintenance({ retentionDays: 30, deps: realDeps, now });
+    await runPrivacyMaintenance({ retentionDays: 28, deps: realDeps, now });
     expect(Object.keys(await rowsByTable(shopA)).length).toBeGreaterThan(3);
 
     await uninstall(SHOP_A);
     const later = new Date(now.getTime() + 6 * 60 * 60_000);
     const summary = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       deps: realDeps,
       now: later,
     });
@@ -477,7 +492,7 @@ describe("privacy compliance", () => {
 
     const recorded = await shopRedact(SHOP_A, "shop-redact-on-hold");
     const summary = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       deps: realDeps,
     });
 
@@ -501,7 +516,7 @@ describe("privacy compliance", () => {
     // at that moment creates a new row and a new offline session.
     let purges = 0;
     const summary = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       deps: {
         deleteSessions: deleteSessionsForShop,
         purgeQueuedJobs: async (shopId) => {
@@ -537,7 +552,7 @@ describe("privacy compliance", () => {
     const now = new Date();
 
     const failed = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       now,
       deps: {
         ...realDeps,
@@ -565,14 +580,14 @@ describe("privacy compliance", () => {
 
     // Not due yet: nothing is claimed.
     const early = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       now: new Date(now.getTime() + 30_000),
       deps: realDeps,
     });
     expect(early).toMatchObject({ resolved: 0, failed: 0 });
 
     const retried = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       now: new Date(now.getTime() + 61_000),
       deps: realDeps,
     });
@@ -651,6 +666,61 @@ describe("privacy compliance", () => {
     expect(await prisma.privacyRequest.count()).toBe(1);
   });
 
+  it("erases a shop the sweep reaches after its deadline, and reports it overdue until then", async () => {
+    // The worker was down, or more than one run's worth of shops expired at
+    // once: the request is born overdue, and the erasure still goes ahead.
+    const late = await seedShop(SHOP_A);
+    await uninstall(SHOP_A);
+    const now = new Date();
+    const uninstalledAt = new Date(now.getTime() - 40 * DAY_MS);
+    await prisma.shop.update({
+      where: { id: late },
+      data: { uninstalledAt },
+    });
+
+    const failedRun = await runPrivacyMaintenance({
+      retentionDays: 28,
+      now,
+      deps: {
+        ...realDeps,
+        deleteSessions: async () => {
+          throw new Error("database unavailable");
+        },
+      },
+    });
+    expect(failedRun).toMatchObject({
+      retentionRequestsOpened: 1,
+      failed: 1,
+      overdue: 1,
+    });
+
+    const retry = await runPrivacyMaintenance({
+      retentionDays: 28,
+      now: new Date(now.getTime() + DAY_MS),
+      deps: realDeps,
+    });
+    expect(retry).toMatchObject({ resolved: 1, overdue: 0 });
+    expect(await prisma.shop.findUnique({ where: { id: late } })).toBeNull();
+    expect(await rowsByTable(late)).toEqual({});
+  });
+
+  it("refuses a retention window above 28 days before touching any shop", async () => {
+    const shopId = await seedShop(SHOP_A);
+    await uninstall(SHOP_A);
+    await prisma.shop.update({
+      where: { id: shopId },
+      data: { uninstalledAt: new Date(Date.now() - 40 * DAY_MS) },
+    });
+
+    await expect(
+      runPrivacyMaintenance({ retentionDays: 30, deps: realDeps }),
+    ).rejects.toThrow(RangeError);
+    expect(await prisma.privacyRequest.count()).toBe(0);
+    expect(
+      await prisma.shop.findUnique({ where: { id: shopId } }),
+    ).not.toBeNull();
+  });
+
   it("reports open requests that are past the deadline", async () => {
     await seedShop(SHOP_A);
     await uninstall(SHOP_A);
@@ -658,7 +728,7 @@ describe("privacy compliance", () => {
     const later = new Date(Date.now() + 31 * DAY_MS);
 
     const summary = await runPrivacyMaintenance({
-      retentionDays: 30,
+      retentionDays: 28,
       now: later,
       deps: {
         ...realDeps,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertRetentionDays,
   resolvePrivacyIntervalMs,
   resolveUninstalledRetentionDays,
 } from "./config.server";
@@ -41,6 +42,14 @@ describe("privacy configuration", () => {
           PRIVACY_UNINSTALLED_RETENTION_DAYS: value,
         }),
       ).toThrow(/PRIVACY_UNINSTALLED_RETENTION_DAYS/);
+    }
+  });
+
+  it("applies the same 1 to 28 day limit to a window passed in directly", () => {
+    expect(() => assertRetentionDays(1)).not.toThrow();
+    expect(() => assertRetentionDays(28)).not.toThrow();
+    for (const days of [0, 29, 30, 365, 27.5, Number.NaN]) {
+      expect(() => assertRetentionDays(days)).toThrow(RangeError);
     }
   });
 
