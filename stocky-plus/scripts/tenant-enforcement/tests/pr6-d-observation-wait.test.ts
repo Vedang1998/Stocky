@@ -9,6 +9,7 @@ import type { PrismaClient } from "@prisma/client";
 import { runOrderFactsSyncJob } from "../../../app/jobs/workers/order-facts/sync-jobs";
 import { asApplyDb } from "../../../app/lib/order-facts/sync/apply-composition";
 import {
+  ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS,
   ORDER_FACTS_HEALTH_DOMAIN,
   ORDER_FACTS_OBSERVATION_WAIT_REASON,
   ORDER_FACTS_OBSERVATION_WAIT_RETRY_MS,
@@ -461,5 +462,93 @@ describe("order jobs that meet another job's open read of the same order", () =>
 
     expect(finished.status, JSON.stringify(finished)).toBe("SUCCEEDED");
     expect(await factCount(gid)).toBe(1);
+  });
+
+  describe("later passes after Shopify's export has finished", () => {
+    const ELEVEN_MINUTES_MS = 11 * 60_000;
+
+    function runPolledImport(input: {
+      key: string;
+      admin: ReturnType<typeof createOrderFactsAdmin>;
+      roots: Record<string, unknown>[];
+    }) {
+      return withTxnHost(shopAId, (db) =>
+        runOrderFactsImportStep({
+          db,
+          admin: input.admin,
+          shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+          shopId: shopAId,
+          durableJobId: input.key,
+          correlationId: input.key,
+          pollBulkOperation: true,
+          fetchJsonl: async () => jsonlLines(input.roots),
+        }),
+      );
+    }
+
+    /** Puts the run where a long import is: export wait allowance used up. */
+    function useUpExportWaitAllowance(key: string) {
+      return getControlPlanePrisma().syncRun.updateMany({
+        where: { shopId: shopAId, correlationId: key },
+        data: {
+          examinedCount: ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS,
+          bulkSubmitIntentAt: new Date(Date.now() - ELEVEN_MINUTES_MS),
+        },
+      });
+    }
+
+    it("finishes the import on a pass that runs after the export wait allowance is used up", async () => {
+      const key = "import-wait-late-pass";
+      const gid = "gid://shopify/Order/wait-late-pass";
+      const admin = createOrderFactsAdmin({
+        stores: { [gid]: standardStore(gid) },
+        bulk: {
+          id: "gid://shopify/BulkOperation/wait-late-pass",
+          status: "COMPLETED",
+          objectCount: "1",
+          rootObjectCount: "1",
+          url: "https://example.invalid/wait-late-pass.jsonl",
+        },
+      });
+      const roots = [bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0 })];
+      const issuesBefore = await issueCount();
+      const webhook = await openWebhookObservation(gid);
+
+      const waiting = await runPolledImport({ key, admin, roots });
+      expect(waiting.status, JSON.stringify(waiting)).toBe("CONTINUE");
+
+      await useUpExportWaitAllowance(key);
+      await endWebhookObservation(webhook);
+      const finished = await runPolledImport({ key, admin, roots });
+
+      expect(finished.status, JSON.stringify(finished)).toBe("SUCCEEDED");
+      expect(await factCount(gid)).toBe(1);
+      expect(await issueCount()).toBe(issuesBefore);
+    });
+
+    it("still gives up on an export that has not finished within the allowance", async () => {
+      const key = "import-wait-export-never-finishes";
+      const admin = createOrderFactsAdmin({
+        stores: {},
+        bulk: {
+          id: "gid://shopify/BulkOperation/wait-never-finishes",
+          status: "RUNNING",
+          pollStatus: "RUNNING",
+          objectCount: "1",
+          rootObjectCount: "1",
+        },
+      });
+
+      const polling = await runPolledImport({ key, admin, roots: [] });
+      expect(polling.status, JSON.stringify(polling)).toBe("CONTINUE");
+
+      await useUpExportWaitAllowance(key);
+      const givenUp = await runPolledImport({ key, admin, roots: [] });
+
+      expect(givenUp, JSON.stringify(givenUp)).toEqual({
+        status: "PARTIAL_FAILURE",
+        reason: "bulk_poll_budget_exhausted",
+      });
+    });
   });
 });

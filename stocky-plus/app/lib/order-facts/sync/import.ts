@@ -298,13 +298,19 @@ export async function runOrderFactsImportStep(input: {
         bulkOperationGid,
       });
     }
-    const budget = await consumePollBudget({
-      shopId: input.shopId,
-      syncRunId: syncRun.id,
-      examinedCount: syncRun.examinedCount,
-      startedAt: syncRun.startedAt ?? syncRun.createdAt,
-      bulkSubmitIntentAt: syncRun.bulkSubmitIntentAt,
-    });
+    // The allowance bounds the wait for Shopify's export. The counts are
+    // stored only once a pass has seen the export finished, and from then on
+    // a later pass is not waiting for it: the job's own attempts bound it.
+    const exportSeenFinished = syncRun.bulkObjectCount != null;
+    const budget = exportSeenFinished
+      ? "ok"
+      : await consumePollBudget({
+          shopId: input.shopId,
+          syncRunId: syncRun.id,
+          examinedCount: syncRun.examinedCount,
+          startedAt: syncRun.startedAt ?? syncRun.createdAt,
+          bulkSubmitIntentAt: syncRun.bulkSubmitIntentAt,
+        });
     if (budget === "exhausted") {
       return failImport({
         shopId: input.shopId,
