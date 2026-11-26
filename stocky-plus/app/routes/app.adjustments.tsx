@@ -52,6 +52,7 @@ import type {
   InventoryOperationStatus,
 } from "../services/inventory-writes/types";
 import { fetchLocations } from "../services/shopify-gql.server";
+import { SYNC_CATALOG_HINT } from "../lib/sync-copy";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, db, tenant } = await requireAdminTenant({ request });
@@ -421,7 +422,7 @@ export default function Adjustments() {
         {locations.length === 0 ? (
           <s-paragraph>
             No Shopify locations were found for this shop. Add a location in
-            Shopify admin, run a sync from the dashboard, then come back.
+            Shopify admin. {SYNC_CATALOG_HINT}, then come back.
           </s-paragraph>
         ) : (
           // Remounted for each new submission ID so a recorded adjustment

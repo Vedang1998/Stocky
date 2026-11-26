@@ -3,6 +3,10 @@
  * report builder directly: they resolve a report here, so the page and its CSV
  * export always come from the same computation.
  */
+import {
+  readOrderHistoryStatus,
+  type OrderHistoryStatus,
+} from "../../sync/sync-status.server";
 import { readShopReportingProfile } from "../../tenant/bootstrap.server";
 import type { TenantAuthority } from "../../tenant/authority.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
@@ -44,6 +48,7 @@ import {
   exportTable,
   facetChoices,
   freshnessNote,
+  orderHistoryNotices,
   tablePage,
   type FacetChoices,
   type ReportExport,
@@ -104,11 +109,15 @@ export async function loadReportContext(input: {
   const timeZone = requireShopTimeZone(profile.ianaTimezone);
   const currencyCode = requireShopCurrency(profile.currencyCode);
   const now = input.now ?? new Date();
+  // Read on first use: CSV exports and reports that do not read order history
+  // never pay for the query.
+  let orderHistory: Promise<OrderHistoryStatus> | undefined;
   return {
     db: input.db,
     timeZone,
     currencyCode,
     installedAt: profile.installedAt,
+    orderHistory: () => (orderHistory ??= readOrderHistoryStatus(input.tenant)),
     today: localDateOf(now, timeZone),
     now,
   };
@@ -282,6 +291,18 @@ export function ignoredFilterNotices(
   ];
 }
 
+/** A failed status lookup only costs the warning; the report itself still renders. */
+async function orderHistoryNoticesOrNone(
+  context: ReportContext,
+): Promise<ReportNotice[]> {
+  try {
+    return orderHistoryNotices(await context.orderHistory());
+  } catch (err) {
+    console.warn("Order history status unavailable for report notice:", err);
+    return [];
+  }
+}
+
 function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
   const { load, ...report } = definition;
 
@@ -328,7 +349,13 @@ function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
         searchLabels: data.columns
           .filter((column) => data.searchKeys.includes(column.key))
           .map((column) => column.label),
-        notices: [...ignoredFilterNotices(ignored), ...data.notices],
+        notices: [
+          ...(report.usesOrderHistory
+            ? await orderHistoryNoticesOrNone(context)
+            : []),
+          ...ignoredFilterNotices(ignored),
+          ...data.notices,
+        ],
         methodNotes: data.methodNotes,
         freshness: freshnessNote(data.dataAsOf, context.timeZone),
         timeZone: context.timeZone,
@@ -353,6 +380,7 @@ const REPORTS: readonly RegisteredReport[] = [
       "Variants ranked by net revenue and units, including active variants that sold nothing.",
     group: "Sales",
     usesDateRange: true,
+    usesOrderHistory: true,
     options: [SELLER_VIEW_OPTION],
     load: async (context, request) => {
       const view = request.options[SELLER_VIEW_OPTION.key];
@@ -369,6 +397,7 @@ const REPORTS: readonly RegisteredReport[] = [
       "Units ordered, added and returned, net units, revenue and average price for each variant.",
     group: "Sales",
     usesDateRange: true,
+    usesOrderHistory: true,
     options: [],
     load: async (context, request) =>
       buildVariantSalesReport(await loadSales(context, request, "sold")),
@@ -380,6 +409,7 @@ const REPORTS: readonly RegisteredReport[] = [
       "Net units and revenue for each product, across all of its variants.",
     group: "Sales",
     usesDateRange: true,
+    usesOrderHistory: true,
     options: [],
     load: async (context, request) =>
       buildProductSalesReport(await loadSales(context, request, "sold")),
@@ -391,6 +421,7 @@ const REPORTS: readonly RegisteredReport[] = [
       "Every sale, refund and order edit, line by line. Test and cancelled orders are left out.",
     group: "Sales",
     usesDateRange: true,
+    usesOrderHistory: true,
     options: [],
     load: async (context, request) =>
       buildSaleItemsReport(await loadSales(context, request, "sold")),
@@ -401,6 +432,7 @@ const REPORTS: readonly RegisteredReport[] = [
     description: "Units and net product revenue for each order.",
     group: "Sales",
     usesDateRange: true,
+    usesOrderHistory: true,
     options: [],
     load: async (context, request) =>
       buildOrdersReport(await loadSales(context, request, "sold")),
@@ -412,6 +444,7 @@ const REPORTS: readonly RegisteredReport[] = [
       "Day-by-day orders, units, revenue, average order value and return rate.",
     group: "Sales",
     usesDateRange: true,
+    usesOrderHistory: true,
     options: [],
     load: async (context, request) =>
       buildStatisticsReport(await loadSales(context, request, "sold")),
@@ -423,6 +456,7 @@ const REPORTS: readonly RegisteredReport[] = [
       "Estimated profit for each variant: net revenue minus today's Shopify cost of the units sold.",
     group: "Sales",
     usesDateRange: true,
+    usesOrderHistory: true,
     options: [],
     load: async (context, request) =>
       buildProfitReport(await loadSales(context, request, "sold")),
@@ -434,6 +468,7 @@ const REPORTS: readonly RegisteredReport[] = [
       "Grades every variant A, B or C by its share of revenue over the last 56 days.",
     group: "Inventory",
     usesDateRange: false,
+    usesOrderHistory: true,
     options: [],
     load: async (context) =>
       buildAbcReport(
@@ -475,6 +510,7 @@ const REPORTS: readonly RegisteredReport[] = [
       "Variants with units on hand that have not been ordered for a while, and the money tied up in them.",
     group: "Inventory",
     usesDateRange: false,
+    usesOrderHistory: true,
     options: [DEAD_STOCK_OPTION],
     load: async (context, request) => {
       const days = Number(request.options[DEAD_STOCK_OPTION.key]);

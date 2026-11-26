@@ -16,7 +16,10 @@ import { ActionFeedback } from "../components/ActionFeedback";
 import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { requireAdminTenantWithActor } from "../services/inventory-writes/actor.server";
+import {
+  requireAdminTenantWithActor,
+  STAFF_REQUIRED_MESSAGE,
+} from "../services/inventory-writes/actor.server";
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
@@ -36,6 +39,7 @@ import {
   unitCount,
 } from "../services/transfers/transfer-display";
 import { MAX_TRANSFER_NOTES_LENGTH } from "../services/transfers/transfer-quantities";
+import { SYNC_CATALOG_HINT } from "../lib/sync-copy";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { db, tenant } = await requireAdminTenant({ request });
@@ -84,6 +88,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     destinationLocationId: text(form.get("destinationLocationId")),
     notes: text(form.get("notes")).slice(0, MAX_TRANSFER_NOTES_LENGTH + 1),
   };
+  // Refused with what was entered, so the form is not emptied.
+  if (!actor) return { error: STAFF_REQUIRED_MESSAGE, values };
   const result = await createTransfer(db, {
     shop: tenant.myshopifyDomain,
     sourceLocationId: readFormId(values.sourceLocationId) ?? "",
@@ -179,8 +185,8 @@ export default function Transfers() {
         {activeLocations.length < 2 ? (
           <s-paragraph>
             A transfer moves stock between two locations, and fewer than two
-            active locations are synced. Run a sync from the dashboard, then
-            create a transfer.
+            active locations are synced. {SYNC_CATALOG_HINT}, then create a
+            transfer.
           </s-paragraph>
         ) : (
           <Form method="post">

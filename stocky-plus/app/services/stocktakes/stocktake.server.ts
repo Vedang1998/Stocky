@@ -39,6 +39,7 @@ import {
   MAX_STOCKTAKE_NAME_LENGTH,
 } from "./stocktake-limits";
 import { keepDifferenceCosts } from "./stocktake-value.server";
+import { SYNC_CATALOG_HINT, inactiveLocationMessage } from "../../lib/sync-copy";
 
 export type StocktakeStatus =
   "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
@@ -209,8 +210,7 @@ const CLOSED_MESSAGE =
 const NOT_FOUND_MESSAGE = "Stocktake not found";
 const UNREADABLE_MESSAGE =
   "Shopify's current quantities could not be read. Nothing was changed. Try again in a moment.";
-const INACTIVE_LOCATION_MESSAGE =
-  "That location is not an active, synced location of this shop. Run a sync from the dashboard, then try again.";
+const INACTIVE_LOCATION_MESSAGE = inactiveLocationMessage();
 
 function chunked<T>(values: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -225,6 +225,33 @@ const clock = (options: { now?: () => Date }) =>
 
 const awaitsRecount = (line: { recountRequestedAt: Date | null }) =>
   line.recountRequestedAt !== null;
+
+export type StocktakeRecountEventKind = "REQUESTED" | "COUNTED" | "KEPT";
+
+/**
+ * Add one step of a recount to the count's history. Called in the
+ * transaction that changes the line, so the history and the line agree; the
+ * table refuses changes to a row once it is written.
+ */
+async function recordRecountEvent(
+  tx: TenantDb,
+  event: {
+    stocktakeId: string;
+    lineItemId: string;
+    shopifyVariantId: string;
+    kind: StocktakeRecountEventKind;
+    questionedQty: number;
+    countedQty?: number;
+    countSource?: "MANUAL" | "SCAN";
+    actor: InventoryActor | null | undefined;
+    at: Date;
+  },
+): Promise<void> {
+  const { actor, at, ...row } = event;
+  await tx.stocktakeRecountEvent.create({
+    data: { ...row, byUserId: actor?.shopifyUserId ?? null, createdAt: at },
+  });
+}
 
 const awaitsMovementReview = (line: CountLine) =>
   line.countedQty !== null &&
@@ -432,7 +459,7 @@ export async function createStocktake(
         ok: false,
         error:
           skippedUnsynced + skippedUnlinked > 0
-            ? "Shopify has no on-hand quantity for the items synced at this location. Run a sync from the dashboard, then start the count again."
+            ? `Shopify has no on-hand quantity for the items synced at this location. ${SYNC_CATALOG_HINT}, then start the count again.`
             : "No tracked items are stocked at this location in Shopify, so there is nothing to count. To count specific items, start a partial count.",
       };
     }
@@ -536,7 +563,7 @@ async function resolveNewLines(
     const itemId = variant.inventoryItemId;
     if (!itemId) {
       refuse(
-        `Shopify inventory is not linked yet for ${variant.title}. Run a catalog sync from the dashboard.`,
+        `Shopify inventory is not linked yet for ${variant.title}. ${SYNC_CATALOG_HINT}.`,
       );
       continue;
     }
@@ -566,7 +593,7 @@ async function resolveNewLines(
     const expectedQty = basisQuantity(level, stocktake.quantityBasis);
     if (expectedQty === null) {
       refuse(
-        `Shopify's ${basisLabel(stocktake.quantityBasis)} quantity for ${variant.title} is not synced yet. Run a sync from the dashboard.`,
+        `Shopify's ${basisLabel(stocktake.quantityBasis)} quantity for ${variant.title} is not synced yet. ${SYNC_CATALOG_HINT}.`,
       );
       continue;
     }
@@ -687,16 +714,19 @@ export async function saveStocktakeCount(
         countedQty: true,
         expectedReadAt: true,
         recountRequestedAt: true,
+        recountFromQty: true,
       },
     })) as {
       countedQty: number | null;
       expectedReadAt: Date | null;
       recountRequestedAt: Date | null;
+      recountFromQty: number | null;
     } | null;
     if (!current) {
       return { ok: false as const, error: "Stocktake line not found" };
     }
     const now = clock(options)();
+    const recounting = counted && awaitsRecount(current);
     await tx.stocktakeLineItem.update({
       where: { id: line.id },
       data: {
@@ -707,12 +737,29 @@ export async function saveStocktakeCount(
         ...(current.countedQty === input.countedQty ? {} : NO_MOVEMENT),
         // Entering a count answers a recount request, also when the second
         // count confirms the first. Clearing the count does not.
-        ...(counted && awaitsRecount(current) ? RECOUNT_DONE : {}),
+        ...(recounting ? RECOUNT_DONE : {}),
         ...(liveExpected !== null && current.expectedReadAt === null
           ? expectedReadNow(liveExpected, now)
           : {}),
       },
     });
+    if (
+      recounting &&
+      input.countedQty !== null &&
+      current.recountFromQty !== null
+    ) {
+      await recordRecountEvent(tx, {
+        stocktakeId: line.stocktakeId,
+        lineItemId: line.id,
+        shopifyVariantId: line.shopifyVariantId,
+        kind: "COUNTED",
+        questionedQty: current.recountFromQty,
+        countedQty: input.countedQty,
+        countSource: "MANUAL",
+        actor: input.actor,
+        at: now,
+      });
+    }
     return { ok: true as const };
   });
 }
@@ -810,12 +857,14 @@ export async function recordStocktakeScan(
       countedQty: number | null;
       expectedReadAt: Date | null;
       recountRequestedAt: Date | null;
+      recountFromQty: number | null;
     };
     const scannedLine = {
       id: true,
       countedQty: true,
       expectedReadAt: true,
       recountRequestedAt: true,
+      recountFromQty: true,
     } as const;
     const now = clock(options)();
     let line = (await tx.stocktakeLineItem.findFirst({
@@ -859,6 +908,20 @@ export async function recordStocktakeScan(
           : {}),
       },
     });
+    // The history says that the recount began with a scan, not what it came
+    // to: later scans add to the count, which the line itself shows.
+    if (recounting && line.recountFromQty !== null) {
+      await recordRecountEvent(tx, {
+        stocktakeId: stocktake.id,
+        lineItemId: line.id,
+        shopifyVariantId: variant.shopifyVariantId,
+        kind: "COUNTED",
+        questionedQty: line.recountFromQty,
+        countSource: "SCAN",
+        actor: input.actor,
+        at: now,
+      });
+    }
     return {
       ok: true as const,
       lineId: line.id,
@@ -1112,8 +1175,13 @@ export async function requestStocktakeRecount(
     }
     const line = (await tx.stocktakeLineItem.findFirst({
       where: { id: input.lineId, stocktakeId: input.stocktakeId },
-      select: { countedQty: true, recountRequestedAt: true },
+      select: {
+        shopifyVariantId: true,
+        countedQty: true,
+        recountRequestedAt: true,
+      },
     })) as {
+      shopifyVariantId: string;
       countedQty: number | null;
       recountRequestedAt: Date | null;
     } | null;
@@ -1126,13 +1194,23 @@ export async function requestStocktakeRecount(
           "This item has no count yet, so there is nothing to count again.",
       };
     }
+    const now = clock(options)();
     await tx.stocktakeLineItem.update({
       where: { id: input.lineId },
       data: {
-        recountRequestedAt: clock(options)(),
+        recountRequestedAt: now,
         recountRequestedByUserId: input.actor?.shopifyUserId ?? null,
         recountFromQty: line.countedQty,
       },
+    });
+    await recordRecountEvent(tx, {
+      stocktakeId: input.stocktakeId,
+      lineItemId: input.lineId,
+      shopifyVariantId: line.shopifyVariantId,
+      kind: "REQUESTED",
+      questionedQty: line.countedQty,
+      actor: input.actor,
+      at: now,
     });
     return { ok: true as const };
   });
@@ -1140,11 +1218,18 @@ export async function requestStocktakeRecount(
 
 /**
  * Take a recount request back: the count on the line stands as it is. A line
- * that does not wait for a recount is left alone.
+ * that does not wait for a recount is left alone. The line then reads as if
+ * it was never asked about; the count's history keeps the request and who
+ * took it back.
  */
 export async function withdrawStocktakeRecount(
   db: TenantDb,
-  input: { stocktakeId: string; lineId: string },
+  input: {
+    stocktakeId: string;
+    lineId: string;
+    actor?: InventoryActor | null;
+  },
+  options: { now?: () => Date } = {},
 ): Promise<StocktakeActionResult> {
   return db.$transaction(async (tx: TenantDb) => {
     if (!(await lockOpenStocktake(tx, input.stocktakeId))) {
@@ -1155,8 +1240,16 @@ export async function withdrawStocktakeRecount(
     }
     const line = (await tx.stocktakeLineItem.findFirst({
       where: { id: input.lineId, stocktakeId: input.stocktakeId },
-      select: { recountRequestedAt: true },
-    })) as { recountRequestedAt: Date | null } | null;
+      select: {
+        shopifyVariantId: true,
+        recountRequestedAt: true,
+        recountFromQty: true,
+      },
+    })) as {
+      shopifyVariantId: string;
+      recountRequestedAt: Date | null;
+      recountFromQty: number | null;
+    } | null;
     if (!line) return { ok: false as const, error: "Stocktake line not found" };
     if (!awaitsRecount(line)) return { ok: true as const };
     await tx.stocktakeLineItem.update({
@@ -1164,6 +1257,17 @@ export async function withdrawStocktakeRecount(
       // The line was not counted again, so it has no earlier count to show.
       data: { ...RECOUNT_DONE, recountFromQty: null },
     });
+    if (line.recountFromQty !== null) {
+      await recordRecountEvent(tx, {
+        stocktakeId: input.stocktakeId,
+        lineItemId: input.lineId,
+        shopifyVariantId: line.shopifyVariantId,
+        kind: "KEPT",
+        questionedQty: line.recountFromQty,
+        actor: input.actor,
+        at: clock(options)(),
+      });
+    }
     return { ok: true as const };
   });
 }
@@ -1322,7 +1426,7 @@ async function buildStocktakeDocument(
   if (unresolved.size > 0) {
     return {
       ok: false,
-      error: `Shopify inventory is not linked yet for: ${[...unresolved].join(", ")}. Run a catalog sync from the dashboard, then complete the count again.`,
+      error: `Shopify inventory is not linked yet for: ${[...unresolved].join(", ")}. ${SYNC_CATALOG_HINT}, then complete the count again.`,
     };
   }
 
