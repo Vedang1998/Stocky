@@ -260,7 +260,7 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     shopIdNullableInPrisma: true,
     legacyShopField: true,
     parentRelationships: [],
-    childRelationships: ["StocktakeLineItem"],
+    childRelationships: ["StocktakeLineItem", "StocktakeRecountEvent"],
     crossDomainRelationships: [],
     existingShopIdIdUnique: true,
     requiredCompositeKey: true,
@@ -627,6 +627,24 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     shopIdNullableInPrisma: false,
     legacyShopField: false,
     parentRelationships: ["DailyStockSnapshot"],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
+    prismaModel: "StocktakeRecountEvent",
+    sqlTable: "StocktakeRecountEvent",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: ["Stocktake"],
     childRelationships: [],
     crossDomainRelationships: [],
     existingShopIdIdUnique: true,
@@ -1539,18 +1557,21 @@ export const PURCHASING_ADDED_MERCHANT_TABLE_COUNT = 4;
 export const REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT = 4;
 /** DailyStockSnapshot + DailyStockLevel (daily stock history). */
 export const STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT = 2;
+/** StocktakeRecountEvent (history of recounts on a count). */
+export const STOCKTAKE_HISTORY_ADDED_MERCHANT_TABLE_COUNT = 1;
 export const EXPECTED_MERCHANT_TABLE_COUNT =
   PRE_PR6_A_MERCHANT_TABLE_COUNT +
   PR6_A_ADDED_MERCHANT_TABLE_COUNT +
   INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT +
   PURCHASING_ADDED_MERCHANT_TABLE_COUNT +
   REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT +
-  STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT;
+  STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT +
+  STOCKTAKE_HISTORY_ADDED_MERCHANT_TABLE_COUNT;
 
 export function assertMerchantTableCount(): void {
   if (MERCHANT_TABLES.length !== EXPECTED_MERCHANT_TABLE_COUNT) {
     throw new Error(
-      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT}+${PURCHASING_ADDED_MERCHANT_TABLE_COUNT}+${REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT}+${STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
+      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT}+${PURCHASING_ADDED_MERCHANT_TABLE_COUNT}+${REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT}+${STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT}+${STOCKTAKE_HISTORY_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
     );
   }
 }
@@ -1576,3 +1597,10 @@ export const INVENTORY_OPERATION_GUARD_FN = "stocky_inventory_operation_guard";
 
 /** Daily stock history is written once; this guard refuses every UPDATE. */
 export const DAILY_STOCK_HISTORY_GUARD_FN = "stocky_daily_stock_history_guard";
+
+/**
+ * Recount history is written once: this guard refuses every UPDATE, and an
+ * INSERT whose count belongs to another shop.
+ */
+export const STOCKTAKE_RECOUNT_EVENT_GUARD_FN =
+  "stocky_stocktake_recount_event_guard";

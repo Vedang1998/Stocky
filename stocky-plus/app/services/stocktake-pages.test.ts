@@ -15,7 +15,9 @@ import type {
   StocktakeLineView,
   StocktakeListEntry,
   StocktakeProgress,
+  StocktakeRecountEventView,
 } from "./stocktakes/stocktake-read.server";
+import { recountEventText } from "./stocktakes/stocktake-display";
 import type { DifferenceValue } from "./stocktakes/stocktake-value";
 import { Prisma } from "@prisma/client";
 
@@ -51,6 +53,7 @@ const {
     getStocktakeProgress: vi.fn(),
     getStocktakeLines: vi.fn(),
     getStocktakeLedgerSummary: vi.fn(),
+    getStocktakeRecountHistory: vi.fn(),
     listStocktakeLinesForExport: vi.fn(),
   },
   context: {
@@ -343,6 +346,7 @@ beforeEach(() => {
     appliedChangeCount: 0,
     refusedChangeCount: 0,
   });
+  reads.getStocktakeRecountHistory.mockResolvedValue({ events: [], total: 0 });
   reads.listStocktakeLinesForExport.mockResolvedValue([line()]);
 });
 
@@ -907,9 +911,10 @@ describe("Count page action", () => {
         ok: true,
         notice: "Count kept. The item no longer waits for a recount.",
       });
+      // Who took the request back goes into the count's history.
       expect(service.withdrawStocktakeRecount).toHaveBeenCalledWith(
         context.db,
-        { stocktakeId: ID, lineId: "line-1" },
+        { stocktakeId: ID, lineId: "line-1", actor: STAFF },
       );
       expect(service.requestStocktakeRecount).not.toHaveBeenCalled();
     });
@@ -2381,5 +2386,128 @@ describe("Printing the count sheet from the count page", () => {
     expect(html).not.toContain("part=7");
     // The buttons give way to the list.
     expect(html).not.toMatch(/<s-button href="[^"]*count-sheet/);
+  });
+});
+
+describe("Recount history on the count page", () => {
+  const step = (
+    extra: Partial<StocktakeRecountEventView> = {},
+  ): StocktakeRecountEventView => ({
+    id: "event-1",
+    at: new Date("2026-11-13T02:30:00.000Z"),
+    kind: "REQUESTED",
+    title: "Red wine",
+    sku: "RED-750",
+    questionedQty: 12,
+    countedQty: null,
+    countSource: null,
+    byUserId: "42",
+    ...extra,
+  });
+
+  it("reads the history of the count that is open on the page", async () => {
+    const recounts = { events: [step()], total: 1 };
+    reads.getStocktakeRecountHistory.mockResolvedValue(recounts);
+
+    expect(await loadCount()).toMatchObject({ recounts });
+    expect(reads.getStocktakeRecountHistory).toHaveBeenCalledWith(
+      context.db,
+      ID,
+    );
+  });
+
+  it("has no history section on a count nobody asked to recount", async () => {
+    expect(await renderCount()).not.toContain("Recount history");
+  });
+
+  it("lists each step with its time on the shop's clock, the item, what happened and who did it", async () => {
+    shopClock.readShopTimeZone.mockResolvedValue("America/Toronto");
+    reads.getStocktakeRecountHistory.mockResolvedValue({
+      events: [
+        step({
+          id: "event-3",
+          kind: "KEPT",
+          questionedQty: 1500,
+          byUserId: null,
+          sku: null,
+          title: "White wine",
+        }),
+        step({
+          id: "event-2",
+          kind: "COUNTED",
+          countedQty: 10,
+          countSource: "MANUAL",
+          byUserId: "77",
+        }),
+        step(),
+      ],
+      total: 3,
+    });
+
+    const html = await renderCount();
+    const rows = html
+      .slice(html.indexOf('heading="Recount history"'))
+      .match(/<s-table-row>.*?<\/s-table-row>/g)
+      ?.map((row) =>
+        (row.match(/<s-table-cell>.*?<\/s-table-cell>/g) ?? []).map((cell) =>
+          cell.replace(/<[^>]+>/g, ""),
+        ),
+      );
+
+    expect(rows).toEqual([
+      [
+        "Nov 12, 2026, 9:30 PM EST",
+        "White wine",
+        "Request taken back; the count asked about was 1,500",
+        "staff not recorded",
+      ],
+      [
+        "Nov 12, 2026, 9:30 PM EST",
+        "Red wine (RED-750)",
+        "Counted again as 10; first counted as 12",
+        "staff ID 77",
+      ],
+      [
+        "Nov 12, 2026, 9:30 PM EST",
+        "Red wine (RED-750)",
+        "Recount asked for; the count was 12",
+        "staff ID 42",
+      ],
+    ]);
+    // Every step is on the page, so nothing says that some are left out.
+    expect(html).not.toMatch(/The latest/);
+  });
+
+  it("says how many steps there are when only the latest are shown", async () => {
+    reads.getStocktakeRecountHistory.mockResolvedValue({
+      events: [step(), step({ id: "event-2" })],
+      total: 1204,
+    });
+
+    const html = (await renderCount()).replace(/<!-- -->/g, "");
+
+    expect(html).toContain("The latest 2 of 1,204 steps.");
+  });
+
+  it("keeps the history on a closed count, where nothing else about a recount is offered", async () => {
+    reads.getStocktake.mockResolvedValue(header({ status: "CANCELLED" }));
+    reads.getStocktakeRecountHistory.mockResolvedValue({
+      events: [step()],
+      total: 1,
+    });
+
+    const html = await renderCount();
+
+    expect(html).toContain('heading="Recount history"');
+    expect(html).toContain("Recount asked for; the count was 12");
+    expect(page.formKeyHandlers.has("recount")).toBe(false);
+  });
+
+  it("says in words that a recount was scanned, without a count the scans did not end on", () => {
+    expect(
+      recountEventText(
+        step({ kind: "COUNTED", countSource: "SCAN", questionedQty: 7 }),
+      ),
+    ).toBe("Counted again by scanning; first counted as 7");
   });
 });
