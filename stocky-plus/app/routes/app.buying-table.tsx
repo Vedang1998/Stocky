@@ -9,7 +9,10 @@ import { Form, redirect, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import type { AbcMetric } from "@prisma/client";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { requireActivePlanSnapshot } from "../billing/entitlements.server";
+import {
+  requireActivePlanSnapshot,
+  snapshotAllowsChanges,
+} from "../billing/entitlements.server";
 import {
   fetchInventoryLevels,
   fetchLocations,
@@ -54,16 +57,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const metric: AbcMetric =
     url.searchParams.get("metric") === "VOLUME" ? "VOLUME" : "REVENUE";
 
-  const settings = await db.shopSettings.upsert({
-    where: { shop },
-    create: { shop },
-    update: {},
-  });
-
-  const [suppliers, locations] = await Promise.all([
+  const [settings, suppliers, locations] = await Promise.all([
+    // Read only: the afterAuth hook creates the row (TEN-02).
+    db.shopSettings.findUnique({
+      where: { shop },
+      select: { subscriptionActive: true },
+    }),
     db.supplier.findMany({ where: {}, orderBy: { name: "asc" } }),
     fetchLocations(admin),
   ]);
+  const subscriptionActive = snapshotAllowsChanges(settings);
   const locationId =
     url.searchParams.get("locationId") || locations[0]?.id || "all";
 
@@ -73,7 +76,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const supplierNotFound =
     !supplier && requestedSupplierId !== "" && requestedSupplierId !== NO_VENDOR;
 
-  if (supplier && settings.subscriptionActive) {
+  if (supplier && subscriptionActive) {
     const mappings = await db.supplierSkuMapping.findMany({
       where: { supplierId: supplier.id },
       take: 50,
@@ -157,7 +160,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     locationId,
     metric,
     rows,
-    gated: !settings.subscriptionActive,
+    gated: !subscriptionActive,
     allowDevActivate:
       process.env.NODE_ENV !== "production" &&
       process.env.ALLOW_DEV_SUBSCRIPTION_ACTIVATE === "true",
@@ -165,7 +168,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 const LOOKBACK_TARGET_MISSING =
-  "Choose a product and a location before changing its lookback window.";
+  "Choose a product and a location before changing its sales period.";
 const ORDER_TARGET_MISSING =
   "Choose a supplier and a location before creating a purchase order.";
 const ORDER_LOCATION_UNKNOWN =
@@ -212,8 +215,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       process.env.NODE_ENV !== "production";
     if (!allow) {
       return {
-        error:
-          "Development subscription activation is disabled. Set ALLOW_DEV_SUBSCRIPTION_ACTIVATE=true only in non-production environments.",
+        error: "This action isn't available.",
       };
     }
     await db.shopSettings.upsert({
@@ -450,9 +452,9 @@ export default function BuyingTable() {
 
       {supplierId && rows.length === 0 && (
         <s-section>
-          <s-banner tone="warning" heading="No SKU mappings for this vendor">
+          <s-banner tone="warning" heading="No products linked to this supplier">
             <s-paragraph>
-              Map Shopify variants to vendor SKUs on the{" "}
+              Link products to this supplier&apos;s SKUs on the{" "}
               <s-link href={`/app/suppliers/${supplierId}`}>
                 supplier detail page
               </s-link>{" "}
@@ -475,10 +477,10 @@ export default function BuyingTable() {
                   <s-table-header>ABC</s-table-header>
                   <s-table-header format="numeric">Current</s-table-header>
                   <s-table-header format="numeric">Incoming</s-table-header>
-                  <s-table-header format="numeric">Velocity/day</s-table-header>
+                  <s-table-header format="numeric">Sales per day</s-table-header>
                   <s-table-header format="numeric">Reorder pt</s-table-header>
                   <s-table-header>To buy</s-table-header>
-                  <s-table-header>Lookback</s-table-header>
+                  <s-table-header>Sales period</s-table-header>
                 </s-table-header-row>
                 <s-table-body>
                   {rows.map((row) => (
@@ -570,11 +572,11 @@ export default function BuyingTable() {
       )}
 
       {lookbackFor && (
-        <s-section heading={`Custom lookback — ${lookbackFor.title}`}>
+        <s-section heading={`Sales period — ${lookbackFor.title}`}>
           <s-paragraph>
-            Override the global lookback window for this SKU only. Velocity
-            will be computed across this date range (out-of-stock days still
-            excluded).
+            Use a different sales period for this product only. Its sales
+            rate is worked out over these dates, leaving out days it was out
+            of stock.
           </s-paragraph>
           <Form method="post" onSubmit={() => setLookbackFor(null)}>
             <input type="hidden" name="intent" value="setLookback" />
@@ -594,7 +596,7 @@ export default function BuyingTable() {
               <input type="hidden" name="variantId" value={lookbackFor.variantId} />
               <input type="hidden" name="locationId" value={locationId} />
               <s-button type="submit" variant="tertiary">
-                Reset to global default
+                Use the shop&apos;s default period
               </s-button>
             </Form>
             <s-button variant="tertiary" onClick={() => setLookbackFor(null)}>

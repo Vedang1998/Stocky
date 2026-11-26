@@ -9,6 +9,13 @@ export type RouteErrorView = {
 const MAX_DETAIL_LENGTH = 200;
 
 /**
+ * Body of the 503 an admin request answers when a reinstalled shop is still
+ * being switched back on (see require-admin-tenant.server.ts).
+ */
+export const REINSTALL_PENDING_MESSAGE =
+  "ProPo is finishing setting up your store. Reload the page in a moment.";
+
+/**
  * The Shopify library signals auth steps by throwing Responses meant for
  * `boundary.error`: an HTML document (session-token bounce, exit-iframe) or an
  * empty 401 carrying App Bridge retry/reauthorize headers. Everything else is
@@ -42,7 +49,8 @@ function safeDetail(error: { data: unknown; internal?: boolean }): string | null
 /**
  * Map a thrown route error to merchant-facing copy. Server errors never expose
  * their message or stack; 4xx responses may show the short plain-text body the
- * route threw (for example "Supplier not found").
+ * route threw (for example "Supplier not found"). The only 503 with its own
+ * copy is the one asking the merchant to reload after a reinstall.
  */
 export function describeRouteError(error: unknown): RouteErrorView {
   if (isRouteErrorResponse(error)) {
@@ -69,6 +77,9 @@ export function describeRouteError(error: unknown): RouteErrorView {
         title: "Request couldn't be completed",
         message: detail ?? "Check the information you entered and try again.",
       };
+    }
+    if (error.status === 503 && detail === REINSTALL_PENDING_MESSAGE) {
+      return { status: 503, title: "Almost ready", message: detail };
     }
     return serverError(error.status);
   }

@@ -5,6 +5,7 @@ import {
   describeBillingTerms,
   formatUsd,
   monthlyPriceLabel,
+  planSummary,
   planTermRows,
 } from "./plan-display";
 import { SELF_SERVE_PLANS, findSelfServePlan } from "./plans";
@@ -187,7 +188,12 @@ describe("describeBillingTerms", () => {
         "UTC",
         now,
       ),
-    ).toEqual({ charge: null, trialEndsOn: null, renewsOn: null, endsOn: null });
+    ).toEqual({
+      charge: null,
+      trialEndsOn: null,
+      renewsOn: null,
+      endsOn: null,
+    });
     expect(
       describeBillingTerms(
         subscription({ price: { amount: "n/a", currencyCode: "USD" } }),
@@ -198,13 +204,45 @@ describe("describeBillingTerms", () => {
   });
 
   it("omits dates when the time zone is unusable", () => {
-    expect(
-      describeBillingTerms(subscription(), "Not/A_Zone", now),
-    ).toEqual({
+    expect(describeBillingTerms(subscription(), "Not/A_Zone", now)).toEqual({
       charge: "$79.00 every 30 days",
       trialEndsOn: null,
       renewsOn: null,
       endsOn: null,
     });
+  });
+});
+
+describe("planSummary", () => {
+  it("names the plan instead of showing its stored key", () => {
+    expect(
+      planSummary({ subscriptionActive: true, subscriptionPlan: "growth" }),
+    ).toBe("Growth plan");
+  });
+
+  it("does not show a key that matches no plan", () => {
+    expect(
+      planSummary({ subscriptionActive: true, subscriptionPlan: "dev" }),
+    ).toBe("Your plan is active.");
+    expect(
+      planSummary({ subscriptionActive: true, subscriptionPlan: null }),
+    ).toBe("Your plan is active.");
+  });
+
+  it("asks for a plan, without promising a free tier, when none is active", () => {
+    const text = planSummary({
+      subscriptionActive: false,
+      subscriptionPlan: "growth",
+    });
+    expect(text).toBe(
+      "No active plan. An active plan is needed to make changes.",
+    );
+    expect(text).not.toMatch(/free/i);
+  });
+
+  it("treats a missing settings row as no plan", () => {
+    expect(planSummary(null)).toBe(
+      "No active plan. An active plan is needed to make changes.",
+    );
   });
 });

@@ -220,6 +220,26 @@ each difference to Shopify through `settleInventoryDocument`.
   counts already sent stay in Shopify and the recount goes out as a further
   change. Until roles exist any staff member of the shop can ask for a recount
   or take one back; there is no separate reviewer.
+- **Recount history.** The line holds only the request that is open now, so
+  each step is also kept as a row of `StocktakeRecountEvent`, written in the
+  same transaction as the step: `REQUESTED` (with the count that is
+  questioned), `COUNTED` (with the new count when it was typed; a recount by
+  scanning records the first scan only, because later scans add to it) and
+  `KEPT` (the request was taken back), each with the staff ID and the time.
+  The rows can be added but not changed (`stocktake_recount_event_immutable`),
+  a row for another shop's count or for a line that is not on the count is
+  refused (`stocktake_recount_event_wrong_shop`,
+  `stocktake_recount_event_wrong_line`), and they go when the count or the
+  shop's data is deleted. Deleting a row is not refused by the database,
+  because the count's cascade and the erasure of a shop need it; the app has
+  no code that deletes one, and the runtime role still holds DELETE on this
+  table like on every merchant table (narrowing that is a change to the
+  enforcement manifest, not made here). Times are the app's clock, the same
+  value the line gets, so the history and the line agree; two steps on one
+  line within the clock difference of two app servers could list in the
+  wrong order. The count page lists the latest 100 steps under
+  "Recount history", newest first, and says so when there are more. The PDF
+  count sheet and the CSV report do not show the history.
 - **Completing.** The difference for a line is counted − expected, sent as a
   relative change to `available` with reason `cycle_count_available`, which
   moves on-hand by the same amount. Completion is refused while lines are
@@ -497,6 +517,26 @@ in Shopify stays as it was at the last confirmed step, and the page keeps
 saying what is unfinished until a plan is active again. Whether documents in
 flight should stay finishable after a plan lapses is a plan-policy decision
 that has not been made.
+
+## Staff identity
+
+Every action of the Stocktakes, Adjustments and Transfers pages needs a named
+staff member: the user ID in the session token Shopify signed for the request
+(`readAdminActor`, `actor.server.ts`). A request without one is answered with
+"Inventory changes need a signed-in Shopify staff member…" before anything is
+saved. That holds for steps that move no stock as well, such as starting a
+draft, editing its items, counting, counting units in and cancelling. A
+refusal hands back what was entered: the fields of a new transfer or count,
+and a pasted list of items.
+
+What is recorded with the staff member: who started a transfer or a count,
+who counted a line, who asked for a recount, who completed or cancelled the
+document, and every request that changes stock in Shopify (the ledger always
+requires an actor), and who took a recount request back (in the recount
+history). Edits to a draft's items, zero fill and the review of moved stock
+are refused without a staff member but are not yet stored with one. The
+check is made in the routes, after the plan gate; the draft and counting
+services still take an optional actor in their signatures.
 
 ## Limits and known gaps
 
