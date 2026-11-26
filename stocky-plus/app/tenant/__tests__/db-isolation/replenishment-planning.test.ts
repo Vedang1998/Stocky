@@ -438,6 +438,7 @@ describe("replenishment planning inputs", () => {
         created: 1,
         cleared: 0,
         skipped: 1,
+        missed: 0,
       });
 
       const rows = await ruleRows(shopAId);
@@ -494,6 +495,7 @@ describe("replenishment planning inputs", () => {
         created: 0,
         cleared: 1,
         skipped: 0,
+        missed: 0,
       });
       const rows = await ruleRows(shopAId);
       expect(
@@ -517,7 +519,7 @@ describe("replenishment planning inputs", () => {
           scopeKey: LOCATION,
           changes: { shelfLimitQuantity: 30 },
         }),
-      ).toEqual({ updated: 0, created: 1, cleared: 0, skipped: 0 });
+      ).toEqual({ updated: 0, created: 1, cleared: 0, skipped: 0, missed: 0 });
       expect(
         (await ruleRows(shopBId)).map((r) => [
           r.scopeKey,

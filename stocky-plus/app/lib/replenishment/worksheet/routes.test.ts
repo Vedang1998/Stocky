@@ -203,7 +203,7 @@ describe("worksheet page action", () => {
 
     it("applies the chosen levels to the rows the filter and search show, in the worksheet's scope", async () => {
       mocks.listViewVariantGids.mockResolvedValue(GIDS);
-      const outcome = { updated: 1, created: 1, cleared: 0, skipped: 0 };
+      const outcome = { updated: 1, created: 1, cleared: 0, skipped: 0, missed: 0 };
       mocks.applyRuleChanges.mockResolvedValue(outcome);
       await expect(
         action(

@@ -72,7 +72,11 @@ export function describeLevelsOutcome(
       : "",
   ].filter(Boolean);
   const done = parts.length > 0 ? parts.join(", ") : "nothing needed changing";
-  return `Levels applied to ${count(variants, "variant", "variants")}: ${done}.`;
+  const missed =
+    outcome.missed > 0
+      ? ` ${count(outcome.missed, "variant was", "variants were")} not changed because someone else saved levels at the same moment. Try again.`
+      : "";
+  return `Levels applied to ${count(variants, "variant", "variants")}: ${done}.${missed}`;
 }
 
 /**

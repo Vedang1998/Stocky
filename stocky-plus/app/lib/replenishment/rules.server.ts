@@ -308,6 +308,11 @@ export type RuleChangeOutcome = {
   cleared: number;
   /** Variants not in the synced catalog, so no new levels were added for them. */
   skipped: number;
+  /**
+   * Variants another save changed at the same moment, so this change was
+   * not applied to them. The merchant is told to try again.
+   */
+  missed: number;
 };
 
 /**
@@ -343,7 +348,7 @@ export async function applyRuleChanges(
     const value = input.changes[field];
     if (value !== undefined) changes[field] = value;
   }
-  const outcome: RuleChangeOutcome = { updated: 0, created: 0, cleared: 0, skipped: 0 };
+  const outcome: RuleChangeOutcome = { updated: 0, created: 0, cleared: 0, skipped: 0, missed: 0 };
   if (variantGids.length === 0 || Object.keys(changes).length === 0) return outcome;
   const setsAValue = RULE_FIELDS.some((field) => changes[field] != null);
 
@@ -371,6 +376,7 @@ export async function applyRuleChanges(
 
       if (hasRule.size > 0) {
         const ruled = [...hasRule];
+        let handled = 0;
         // A rule must keep at least one level. When the changes only clear
         // levels, rules left with none are removed instead of updated.
         if (!setsAValue) {
@@ -381,6 +387,7 @@ export async function applyRuleChanges(
             where: { variantGid: { in: ruled }, scopeKey, ...keptNull },
           });
           outcome.cleared += cleared.count;
+          handled += cleared.count;
         }
         // Guarded so that an update never leaves a rule with no level, even
         // if another clear ran since the delete above.
@@ -396,6 +403,10 @@ export async function applyRuleChanges(
           data: changes,
         });
         outcome.updated += updated.count;
+        handled += updated.count;
+        // A rule read above that neither changed nor went away was removed
+        // or emptied by another save since; say so rather than hide it.
+        outcome.missed += Math.max(0, ruled.length - handled);
       }
 
       const withoutRule = chunk.filter((gid) => !hasRule.has(gid));
@@ -421,6 +432,7 @@ export async function applyRuleChanges(
               data: changes,
             });
             outcome.updated += raced.count - created.count;
+            outcome.missed += Math.max(0, liveGids.length - raced.count);
           }
         }
       }
