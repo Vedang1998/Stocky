@@ -10,6 +10,7 @@ import {
   type StocktakeCountSource,
   type StocktakeExpectedSource,
   type StocktakeQuantityBasis,
+  type StocktakeRecountEventKind,
   type StocktakeScope,
   type StocktakeStatus,
 } from "./stocktake.server";
@@ -20,6 +21,8 @@ export const STOCKTAKE_LINE_PAGE_SIZE = 50;
 const SEARCH_MATCH_LIMIT = 500;
 const MAX_SEARCH_LENGTH = 100;
 const LOOKUP_CHUNK = 2_000;
+/** Steps of a count's recount history shown on its page, newest first. */
+export const RECOUNT_HISTORY_LIMIT = 100;
 
 export const STOCKTAKE_LIST_VIEWS = ["open", "closed"] as const;
 export type StocktakeListView = (typeof STOCKTAKE_LIST_VIEWS)[number];
@@ -166,14 +169,24 @@ export function readLineSearch(value: string | null): string {
  */
 export async function listStocktakes(
   db: TenantDb,
-  input: { view: StocktakeListView; page: number },
+  input: {
+    view: StocktakeListView;
+    page: number;
+    /** Only counts of this location. */
+    locationGid?: string;
+    /** Only counts that are being counted now, not drafts. */
+    inProgressOnly?: boolean;
+  },
 ): Promise<{ stocktakes: StocktakeListEntry[]; hasMore: boolean }> {
   const rows = (await db.stocktake.findMany({
     where: {
       status:
         input.view === "open"
-          ? { in: ["DRAFT", "IN_PROGRESS"] }
+          ? input.inProgressOnly
+            ? "IN_PROGRESS"
+            : { in: ["DRAFT", "IN_PROGRESS"] }
           : { in: ["COMPLETED", "CANCELLED"] },
+      ...(input.locationGid ? { locationId: input.locationGid } : {}),
     },
     select: HEADER_SELECT,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -482,6 +495,86 @@ export interface StocktakeLedgerSummary {
   appliedChangeCount: number;
   /** Changes Shopify refused in the last attempt. */
   refusedChangeCount: number;
+}
+
+export interface StocktakeRecountEventView {
+  id: string;
+  at: Date;
+  kind: StocktakeRecountEventKind;
+  title: string;
+  sku: string | null;
+  /** The count that was questioned. */
+  questionedQty: number;
+  /** The count typed in its place; null when the recount was scanned. */
+  countedQty: number | null;
+  countSource: StocktakeCountSource | null;
+  byUserId: string | null;
+}
+
+/**
+ * The recounts of a count, newest first: each one asked for, each one done
+ * and each request taken back. `total` says how many steps there are when the
+ * page shows only the latest.
+ */
+export async function getStocktakeRecountHistory(
+  db: TenantDb,
+  stocktakeId: string,
+): Promise<{ events: StocktakeRecountEventView[]; total: number }> {
+  const where = { stocktakeId };
+  const rows = (await db.stocktakeRecountEvent.findMany({
+    where,
+    select: {
+      id: true,
+      createdAt: true,
+      kind: true,
+      shopifyVariantId: true,
+      questionedQty: true,
+      countedQty: true,
+      countSource: true,
+      byUserId: true,
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: RECOUNT_HISTORY_LIMIT,
+  })) as Array<{
+    id: string;
+    createdAt: Date;
+    kind: StocktakeRecountEventKind;
+    shopifyVariantId: string;
+    questionedQty: number;
+    countedQty: number | null;
+    countSource: StocktakeCountSource | null;
+    byUserId: string | null;
+  }>;
+  // Fewer rows than the limit are all of them; only a full page is counted.
+  const total =
+    rows.length < RECOUNT_HISTORY_LIMIT
+      ? rows.length
+      : ((await db.stocktakeRecountEvent.count({ where })) as number);
+  if (rows.length === 0) return { events: [], total };
+
+  const catalog = await findVariantsById(
+    db,
+    rows.map((row) => row.shopifyVariantId),
+  );
+  return {
+    // Field by field: the tenant layer adds the shop to every row it reads,
+    // and none of that belongs on the page.
+    events: rows.map((row) => {
+      const variant = catalog.get(row.shopifyVariantId);
+      return {
+        id: row.id,
+        at: row.createdAt,
+        kind: row.kind,
+        title: variant?.title ?? row.shopifyVariantId,
+        sku: variant?.sku ?? null,
+        questionedQty: row.questionedQty,
+        countedQty: row.countedQty,
+        countSource: row.countSource,
+        byUserId: row.byUserId,
+      };
+    }),
+    total,
+  };
 }
 
 /** What the inventory ledger holds for a count: whether applying it has started, and how far it got. */

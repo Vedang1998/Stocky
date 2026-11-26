@@ -56,7 +56,9 @@ const WRITE_DESCRIPTION: Record<InventoryWriteCapability, string> = {
 
 /**
  * The thrown message is shown to merchants, so it says what is unavailable
- * and nothing about configuration. The switch name goes to the server log.
+ * and nothing about configuration. The switches are set for the whole app,
+ * not per shop, and the message says so: nothing the merchant changes in
+ * their store turns one on. The switch name goes to the server log.
  */
 export function assertInventoryWriteEnabled(
   capability: InventoryWriteCapability,
@@ -66,7 +68,7 @@ export function assertInventoryWriteEnabled(
       `Refused an inventory write: ${WRITE_SWITCH[capability]} is not enabled`,
     );
     throw new Error(
-      `${WRITE_DESCRIPTION[capability]} is not turned on for this store yet.`,
+      `${WRITE_DESCRIPTION[capability]} is switched off in this app for now.`,
     );
   }
 }
