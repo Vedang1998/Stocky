@@ -198,6 +198,8 @@ function hasShareUpdateExclusiveWithoutAccessExclusive(
 
 const FF03_BUILD_SCAN_PHASE = "building index: scanning table";
 const FF03_VALIDATION_SCAN_PHASE = "index validation: scanning table";
+/** The phase after both scans: the build waits for snapshots older than its own. */
+const FF03_OLD_SNAPSHOT_WAIT_PHASE = "waiting for old snapshots";
 const FF03_OWNED_CLEANUP_DEADLINE_MS = 8_000;
 /** Bound for completing an in-flight sampler/observer query. Not a write-wait. */
 const FF03_SAMPLER_CATCH_UP_MS = 1_000;
@@ -347,6 +349,15 @@ async function waitForActiveScanTrigger(options: {
     }
     if (isActiveScanSample(sample, options.targetPhase)) {
       return sample;
+    }
+    if (sample.phase === FF03_OLD_SNAPSHOT_WAIT_PHASE) {
+      // Both scans are over. A held snapshot can keep the build in this phase
+      // for as long as the caller likes, so say so now instead of polling to
+      // the deadline.
+      throw new Error(
+        `Iteration ${options.iteration}: scan "${options.targetPhase}" finished before an in-progress sample was seen ` +
+          `(phasesSeen=${JSON.stringify([...options.phasesSeen])} last=${JSON.stringify(summarizeSample(last))})`,
+      );
     }
     // Phase text matches but counters say the scan already finished: do not
     // treat that as active coverage; keep polling until a remaining-work
@@ -721,6 +732,8 @@ class Ff03OwnedRuntime {
   sampler: Client | null = null;
   gate1: Client | null = null;
   gate2: Client | null = null;
+  /** Holds an old snapshot so the build cannot settle right after validation. */
+  gate3: Client | null = null;
   builderPid = 0;
   ownedPids: number[] = [];
   samples: Ff03ProgressSample[] = [];
@@ -756,6 +769,8 @@ class Ff03OwnedRuntime {
       await register(this.gate1);
       this.gate2 = await connectPlainClient();
       await register(this.gate2);
+      this.gate3 = await connectPlainClient();
+      await register(this.gate3);
     } catch (error) {
       for (const client of opened.reverse()) {
         try {
@@ -912,7 +927,7 @@ class Ff03OwnedRuntime {
       }
     }
 
-    for (const gate of [this.gate1, this.gate2]) {
+    for (const gate of [this.gate1, this.gate2, this.gate3]) {
       if (!gate) continue;
       try {
         await gate.query("ROLLBACK");
@@ -951,6 +966,7 @@ class Ff03OwnedRuntime {
     const clients: Array<Client | null> = [
       this.gate1,
       this.gate2,
+      this.gate3,
       this.builder,
       this.writer,
       this.observer,
@@ -970,6 +986,7 @@ class Ff03OwnedRuntime {
     this.sampler = null;
     this.gate1 = null;
     this.gate2 = null;
+    this.gate3 = null;
 
     const inspect = await connectPlainClient();
     let remainder: Ff03RemainderSnapshot = { activity: [], progress: [], locks: [] };
@@ -2347,6 +2364,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
       const observer = runtime.observer!;
       const gate1 = runtime.gate1!;
       const gate2 = runtime.gate2!;
+      const gate3 = runtime.gate3!;
       const builderPid = runtime.builderPid;
 
       const evidence: Record<string, unknown> = {
@@ -2543,6 +2561,22 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
           phasesSeen,
           isBuildSettled,
         });
+        // Nothing holds the build back once the validation scan ends, so on a
+        // fast runner it settled while the evidence for the writes was still
+        // being gathered (CI runs 45751307457 and 45767067621). gate3 takes a
+        // snapshot older than the one the validation scan will use; PostgreSQL
+        // then stays in "waiting for old snapshots" after the scan until gate3
+        // commits. The scan itself and the writes are not held by it.
+        await gate3.query(
+          "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        );
+        const snapshotHold = await gate3.query<{ backend_xmin: string | null }>(
+          `SELECT backend_xmin::text AS backend_xmin
+           FROM pg_stat_activity
+           WHERE pid = pg_backend_pid()`,
+        );
+        expect(snapshotHold.rows[0]?.backend_xmin).toBeTruthy();
+        evidence.validationSnapshotHoldXmin = snapshotHold.rows[0]!.backend_xmin;
         await gate2.query("COMMIT");
 
         const validationScanWrites = await overlapWritesWithActiveScan(
@@ -2550,6 +2584,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
           `validate-${iteration}`,
           120_000,
         );
+        await gate3.query("COMMIT");
 
         await runtime.stopSampler();
         if (!runtime.buildPromise) {
