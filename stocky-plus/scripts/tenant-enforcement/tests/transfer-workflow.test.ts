@@ -2245,6 +2245,97 @@ describe("transfer workflow", () => {
       ]);
     });
 
+    it("moves no stock for a next shipment that read the transfer before another press shipped the rest", async () => {
+      const { id, red, white } = await firstShipmentSent();
+      await pick(red.id, 3);
+
+      // The first press reads the transfer (3 red picked, no white) and is
+      // held up at its stock check. Meanwhile the white units are picked and
+      // a second press ships everything that was left.
+      let heldUp = false;
+      let second: Awaited<ReturnType<typeof shipNext>> | undefined;
+      const first = await shipNext(id, {
+        ...enabled(),
+        readQuantities: async (...args) => {
+          if (!heldUp) {
+            heldUp = true;
+            await pick(white.id, 6);
+            second = await shipNext(id);
+          }
+          return reader()(...args);
+        },
+      });
+
+      expect(second).toEqual({
+        ok: true,
+        alreadyDone: false,
+        shippedUnits: 9,
+        stillToShipUnits: 0,
+      });
+      const afterSecond = [
+        [item(101), SOURCE, -1],
+        [item(101), SOURCE, -3],
+        [item(102), SOURCE, -6],
+      ];
+      // The first press is refused and records nothing: its document had no
+      // white units in it, and settling it would have put all six back.
+      expect(first).toMatchObject({
+        ok: false,
+        error: expect.stringContaining(
+          "This transfer was changed while its stock was being moved",
+        ),
+      });
+      expect((await shipmentLines(id)).flat().sort()).toEqual(
+        afterSecond.sort(),
+      );
+      expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
+      expect(await load(id)).toMatchObject({
+        status: "IN_TRANSIT",
+        shipsInParts: false,
+      });
+      expect(await quantities(id)).toEqual([
+        [RED, 4, 4],
+        [WHITE, 6, 6],
+      ]);
+    });
+
+    it("moves no stock for a next shipment whose units were changed after it read them", async () => {
+      const { id, red, white } = await firstShipmentSent();
+      await pick(red.id, 3);
+      await pick(white.id, 2);
+      const sent = shopify.requests.length;
+
+      // Held up at its stock check, while the white units are set to none.
+      let heldUp = false;
+      const stale = await shipNext(id, {
+        ...enabled(),
+        readQuantities: async (...args) => {
+          if (!heldUp) {
+            heldUp = true;
+            await pick(white.id, 0);
+          }
+          return reader()(...args);
+        },
+      });
+
+      expect(stale).toMatchObject({ ok: false });
+      expect(shopify.requests).toHaveLength(sent);
+      expect(levels()).toMatchObject({ redSource: 9, whiteSource: 20 });
+      expect(await quantities(id)).toEqual([
+        [RED, 1, 3],
+        [WHITE, 0, 0],
+      ]);
+
+      // The next press ships the transfer as it now stands.
+      expect(await shipNext(id)).toEqual({
+        ok: true,
+        alreadyDone: false,
+        shippedUnits: 3,
+        stillToShipUnits: 6,
+      });
+      expect(levels()).toMatchObject({ redSource: 6, whiteSource: 20 });
+    });
+
     it("does not let a draft be switched to several shipments while its shipment is part-way", async () => {
       const id = await draftTransfer();
       rejectNextChangeAt(1);

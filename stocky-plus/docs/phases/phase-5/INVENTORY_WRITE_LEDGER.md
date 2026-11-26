@@ -402,7 +402,12 @@ documents above are the record of what moved.
   the same `TransferShipment:<id>` document, now built from the shipped units
   plus the units picked for the shipment being sent, so a second press, two
   presses at once and a retry send only what Shopify has not confirmed, and
-  the source is checked only for the units of that shipment. The lines move
+  the source is checked only for the units of that shipment. A transfer stays
+  in transit from one shipment to the next, so its status cannot stop a
+  request that read it before another one changed the picks or sent a
+  shipment; a next shipment therefore records an operation only if, under the
+  transfer's lock, every line still has the shipped, picked and returned
+  units the request read. A late request records and sends nothing. The lines move
   on (`shippedQty` grows, `pickedQty` returns to 0) only when the ledger
   shows the whole shipment out. When the last unit has shipped, or the
   transfer is closed, `shipsInParts` is cleared and `pickedQty` holds the

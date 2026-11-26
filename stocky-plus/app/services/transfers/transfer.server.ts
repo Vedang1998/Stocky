@@ -827,6 +827,30 @@ export async function shipTransfer(
   return fail(TRANSFER_NOT_FOUND_MESSAGE);
 }
 
+/**
+ * Whether a transfer still stands as a next shipment read it: open for
+ * shipments, with the same shipped, picked and returned units on every line.
+ * Those are the numbers its shipment document is built from.
+ */
+function sameShipment(
+  read: TransferWithLines,
+  now: TransferWithLines | null,
+): boolean {
+  if (!now?.shipsInParts || now.lineItems.length !== read.lineItems.length) {
+    return false;
+  }
+  return read.lineItems.every((line, index) => {
+    const other = now.lineItems[index];
+    return (
+      other.id === line.id &&
+      other.quantity === line.quantity &&
+      other.shippedQty === line.shippedQty &&
+      other.pickedQty === line.pickedQty &&
+      other.returnedQty === line.returnedQty
+    );
+  });
+}
+
 const NOTHING_LEFT_TO_SHIP_MESSAGE =
   "Nothing on this transfer is waiting to ship.";
 
@@ -910,6 +934,11 @@ export async function shipNextTransferShipment(
     if (blocked) return blocked;
   }
 
+  // The transfer stays in transit from one shipment to the next, so its
+  // status does not stop a request that read it before another one changed
+  // the picks or sent a shipment. Such a request would move stock towards a
+  // document the transfer no longer stands for, so it records nothing unless
+  // the lines are still as it read them.
   const settled = await settleTransferDocument(
     db,
     admin,
@@ -917,6 +946,7 @@ export async function shipNextTransferShipment(
     built.document,
     "IN_TRANSIT",
     options,
+    async (tx) => sameShipment(transfer, await loadTransfer(tx, transfer.id)),
   );
   if (!settled.ok) return fail(settled.error);
   if (!settled.settle.settled) {
@@ -935,13 +965,15 @@ export async function shipNextTransferShipment(
     }
     const current = await loadTransfer(tx, transfer.id);
     if (!current) return "not_in_transit" as const;
-    // Still in transit and no longer open for shipments: another press sent
-    // these last units a moment ago.
-    if (!current.shipsInParts) return { shippedUnits: 0, stillToShipUnits: 0 };
+    // Whatever happened meanwhile, the ledger has to agree with the transfer
+    // as it now stands before this request reports anything but a change.
     const rebuilt = await buildShipmentDocument(tx, current, undefined, true);
     if (!rebuilt.ok || !(await isSettled(tx, rebuilt.document))) {
       return "changed" as const;
     }
+    // Still in transit and no longer open for shipments: another press sent
+    // these last units a moment ago.
+    if (!current.shipsInParts) return { shippedUnits: 0, stillToShipUnits: 0 };
     let shippedUnits = 0;
     let stillToShipUnits = 0;
     const shippedNow = current.lineItems.map((line) => {

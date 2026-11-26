@@ -296,7 +296,9 @@ export async function buildShipmentDocument(
     returning ? "movement_canceled" : "movement_created",
     (line) =>
       transferShipQuantity(line, transfer.shipsInParts) +
-      (withNextShipment && transfer.status === "IN_TRANSIT"
+      (withNextShipment &&
+      transfer.shipsInParts &&
+      transfer.status === "IN_TRANSIT"
         ? line.pickedQty
         : 0) -
       (returning ? returning(line) : line.returnedQty),
@@ -342,7 +344,12 @@ export async function isSettled(
 export type SettleOutcome =
   { ok: true; settle: SettleResult } | { ok: false; error: string };
 
-/** Settle a leg's document, recording new operations only while the transfer is still in `whileIn`. */
+/**
+ * Settle a leg's document, recording new operations only while the transfer
+ * is still in `whileIn`. `asRead`, when given, is asked under the transfer's
+ * lock, in the transaction that records an operation, whether the transfer
+ * still stands as the document was built from; if not, nothing is recorded.
+ */
 export async function settleTransferDocument(
   db: TenantDb,
   admin: AdminGraphQLClient | null,
@@ -350,6 +357,7 @@ export async function settleTransferDocument(
   document: InventoryDocument,
   whileIn: TransferStatus,
   options: ExecuteInventoryOperationOptions,
+  asRead?: (tx: TenantDb) => Promise<boolean>,
 ): Promise<SettleOutcome> {
   try {
     return {
@@ -361,7 +369,9 @@ export async function settleTransferDocument(
           ...document,
           actor,
           note: null,
-          holdOpen: (tx) => lockTransferIn(tx, document.source.id, whileIn),
+          holdOpen: async (tx) =>
+            (await lockTransferIn(tx, document.source.id, whileIn)) &&
+            (!asRead || (await asRead(tx))),
         },
         options,
       ),
