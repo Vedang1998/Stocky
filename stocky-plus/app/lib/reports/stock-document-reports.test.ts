@@ -156,6 +156,28 @@ describe("buildTransfersReport", () => {
     expect(row.shippedUnits).toBe(10);
   });
 
+  it("counts what has shipped so far on a transfer that ships in several shipments", () => {
+    const rows = rowsByKey(
+      report([
+        // Four of ten have left; three more are picked for the next shipment.
+        transferLine("a", {
+          status: "IN_TRANSIT",
+          shippedQty: 4,
+          pickedQty: 3,
+        }),
+        // Nothing of this item has left yet.
+        transferLine("b", {
+          status: "IN_TRANSIT",
+          variantGid: variantGid(2),
+          shippedQty: 0,
+        }),
+      ]),
+    );
+
+    expect(rows.get("a")).toMatchObject({ shipped: 4, inTransit: 4 });
+    expect(rows.get("b")).toMatchObject({ shipped: 0, inTransit: 0 });
+  });
+
   it("moves received units out of transit", () => {
     const rows = rowsByKey(
       report([

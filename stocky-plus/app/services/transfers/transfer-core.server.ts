@@ -21,6 +21,7 @@ import {
 } from "../inventory-writes/variant-items.server";
 import {
   transferShipQuantity,
+  transferShipsInParts,
   type TransferLineQuantities,
 } from "./transfer-quantities";
 import { SYNC_CATALOG_HINT } from "../../lib/sync-copy";
@@ -51,6 +52,8 @@ export interface TransferWithLines {
   destinationLocationId: string;
   status: TransferStatus;
   shopifyTransferId: string | null;
+  /** Units that have not shipped yet stay on the transfer and ship later. */
+  shipsInParts: boolean;
   lineItems: TransferLine[];
 }
 
@@ -73,6 +76,14 @@ export const TRANSFER_NOT_FOUND_MESSAGE = "Transfer not found";
 export const LINE_NOT_FOUND_MESSAGE = "Transfer line not found";
 export const NOT_DRAFT_MESSAGE =
   "This transfer has already been shipped or cancelled. Its lines can no longer be changed.";
+export const NO_SHIPMENT_RECORD_MESSAGE =
+  "ProPo has no complete record of this transfer leaving the source location, so it will not add stock at the destination.";
+export const RETURN_UNFINISHED_MESSAGE =
+  "Closing this transfer was started and part of its stock is already back at the source, so nothing more can be received. Close the transfer again to finish.";
+export const NEXT_SHIPMENT_UNFINISHED_MESSAGE =
+  "The last shipment of this transfer did not finish: stock left the source that the transfer does not show as shipped yet. Ship the picked units again, or close the transfer to put that stock back.";
+export const NO_UNITS_TO_SHIP_MESSAGE =
+  "No units are entered to ship now. Enter the units of at least one item that leave with this shipment.";
 export const NOT_IN_TRANSIT_MESSAGE =
   "Only a transfer that is in transit can be received.";
 export const SWITCHED_OFF_MESSAGE =
@@ -118,10 +129,18 @@ export async function loadTransfer(
   db: TenantDb,
   transferId: string,
 ): Promise<TransferWithLines | null> {
-  return (await db.transferOrder.findFirst({
+  const transfer = (await db.transferOrder.findFirst({
     where: { id: transferId },
     include: { lineItems: { orderBy: { id: "asc" } } },
   })) as TransferWithLines | null;
+  // Every step reads the transfer through here, so none of them takes a
+  // transfer shipped whole by earlier code for one that ships in parts.
+  return (
+    transfer && {
+      ...transfer,
+      shipsInParts: transferShipsInParts(transfer, transfer.lineItems),
+    }
+  );
 }
 
 export type TransferLeg = "shipment" | "receipt";
@@ -258,14 +277,17 @@ async function buildLegDocument(
 
 /**
  * What a transfer has taken out of the source: the shipped units of every
- * line, less the units that went back there. `returning` gives the units of
- * each line a close-short is about to put back; without it the units each
- * line already records as returned are used.
+ * line, less the units that went back there. On a draft the shipped units are
+ * the ones its first shipment takes. `returning` gives the units of each line
+ * a close-short is about to put back; without it the units each line already
+ * records as returned are used. `withNextShipment` adds the units picked for
+ * the next shipment of a transfer in transit that ships in parts.
  */
 export async function buildShipmentDocument(
   db: TenantDb,
   transfer: TransferWithLines,
   returning?: (line: TransferLine) => number,
+  withNextShipment = false,
 ): Promise<BuiltDocument> {
   const built = await buildLegDocument(
     db,
@@ -273,11 +295,22 @@ export async function buildShipmentDocument(
     "shipment",
     returning ? "movement_canceled" : "movement_created",
     (line) =>
-      transferShipQuantity(line) -
+      transferShipQuantity(line, transfer.shipsInParts) +
+      (withNextShipment &&
+      transfer.shipsInParts &&
+      transfer.status === "IN_TRANSIT"
+        ? line.pickedQty
+        : 0) -
       (returning ? returning(line) : line.returnedQty),
   );
   if (built.ok && built.document.desired.length === 0 && !returning) {
-    return { ok: false, error: "Transfer has no line items" };
+    return {
+      ok: false,
+      error:
+        transfer.lineItems.length > 0 && transfer.shipsInParts
+          ? NO_UNITS_TO_SHIP_MESSAGE
+          : "Transfer has no line items",
+    };
   }
   return built;
 }
@@ -311,7 +344,12 @@ export async function isSettled(
 export type SettleOutcome =
   { ok: true; settle: SettleResult } | { ok: false; error: string };
 
-/** Settle a leg's document, recording new operations only while the transfer is still in `whileIn`. */
+/**
+ * Settle a leg's document, recording new operations only while the transfer
+ * is still in `whileIn`. `asRead`, when given, is asked under the transfer's
+ * lock, in the transaction that records an operation, whether the transfer
+ * still stands as the document was built from; if not, nothing is recorded.
+ */
 export async function settleTransferDocument(
   db: TenantDb,
   admin: AdminGraphQLClient | null,
@@ -319,6 +357,7 @@ export async function settleTransferDocument(
   document: InventoryDocument,
   whileIn: TransferStatus,
   options: ExecuteInventoryOperationOptions,
+  asRead?: (tx: TenantDb) => Promise<boolean>,
 ): Promise<SettleOutcome> {
   try {
     return {
@@ -330,7 +369,9 @@ export async function settleTransferDocument(
           ...document,
           actor,
           note: null,
-          holdOpen: (tx) => lockTransferIn(tx, document.source.id, whileIn),
+          holdOpen: async (tx) =>
+            (await lockTransferIn(tx, document.source.id, whileIn)) &&
+            (!asRead || (await asRead(tx))),
         },
         options,
       ),

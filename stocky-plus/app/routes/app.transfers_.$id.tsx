@@ -38,6 +38,8 @@ import {
   removeTransferLine,
   setTransferLineQuantity,
   setTransferPickedQuantity,
+  setTransferShipsInParts,
+  shipNextTransferShipment,
   shipTransfer,
 } from "../services/transfers/transfer.server";
 import {
@@ -117,6 +119,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
           transfer.status,
           lines.totals,
           transferLedgerStanding(history),
+          transfer.shipsInParts,
         ),
     planActive,
     timeZone,
@@ -280,6 +283,51 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       notice: result.alreadyDone
         ? "This transfer was already shipped. Nothing more was sent to Shopify."
         : "Transfer shipped. Its stock has left the source location in Shopify.",
+    };
+  }
+
+  if (intent === "shipsInParts") {
+    const shipsInParts = form.get("value") === "1";
+    const result = await setTransferShipsInParts(db, {
+      transferId,
+      shipsInParts,
+    });
+    if (!result.ok) return { error: result.error };
+    return {
+      ok: true,
+      notice: shipsInParts
+        ? "This transfer now ships in several shipments. Enter the units that leave with the first one."
+        : "This transfer now ships in one shipment.",
+    };
+  }
+
+  if (intent === "shipNext") {
+    const result = await shipNextTransferShipment(
+      db,
+      admin,
+      actor,
+      transferId,
+      { allowShortSource: form.get("allowShortSource") === "1" },
+    );
+    if (!result.ok) {
+      return {
+        error: result.error,
+        problems: result.problems,
+        blocker: result.blocker,
+      };
+    }
+    const rest =
+      result.stillToShipUnits > 0
+        ? `${unitCount(result.stillToShipUnits)} still to ship.`
+        : "Every unit of this transfer has now shipped.";
+    return {
+      ok: true,
+      notice:
+        result.shippedUnits > 0
+          ? `Shipment sent: ${unitCount(result.shippedUnits)} left the source location in Shopify. ${rest}`
+          : result.alreadyDone
+            ? `This shipment had already been sent. Nothing was sent twice. ${rest}`
+            : `No units were entered to ship, so stock that had left the source without being shown as shipped was put back. ${rest}`,
     };
   }
 
@@ -447,6 +495,10 @@ const ATTENTION: Record<TransferAttention, { heading: string; text: string }> =
       heading: "Closing this transfer did not finish",
       text: "Part of its missing stock is already back at the source location, so nothing more can be received. Close the transfer again to finish. Changes Shopify has confirmed are not sent twice.",
     },
+    NEXT_SHIPMENT_UNFINISHED: {
+      heading: "The last shipment of this transfer did not finish",
+      text: "Part of its stock may have left the source location without being shown as shipped, so nothing more can be received yet. Ship the units again to finish, or close the transfer to put that stock back. Changes Shopify has confirmed are not sent twice.",
+    },
     RECEIPT_UNFINISHED: {
       heading: "The last receipt is not fully posted",
       text: "Stock at the destination does not match the units this transfer shows as received yet. Post the receipt again to send what is left. Changes Shopify has confirmed are not sent twice.",
@@ -542,6 +594,7 @@ export default function TransferDetail() {
   const draft = transfer.status === "DRAFT";
   const inTransit = transfer.status === "IN_TRANSIT";
   const managedByShopify = transfer.shopifyTransferId !== null;
+  const inParts = transfer.shipsInParts;
   const badge = transferStatusBadge(transfer.status, totals);
   const receivable =
     inTransit &&
@@ -550,7 +603,18 @@ export default function TransferDetail() {
   const closable =
     inTransit &&
     !managedByShopify &&
-    (attention === null || attention === "RETURN_UNFINISHED");
+    (attention === null ||
+      attention === "RETURN_UNFINISHED" ||
+      attention === "NEXT_SHIPMENT_UNFINISHED");
+  // The next shipment of a transfer that ships in parts can be picked and sent.
+  const shippable =
+    inTransit &&
+    inParts &&
+    !managedByShopify &&
+    (attention === null ||
+      attention === "NEXT_SHIPMENT_UNFINISHED" ||
+      attention === "RECEIPT_UNFINISHED");
+  const laterUnits = totals.requestedUnits - totals.shipUnits;
   const sourceShort =
     actionData && "blocker" in actionData
       ? actionData.blocker === "SOURCE_SHORT"
@@ -628,7 +692,8 @@ export default function TransferDetail() {
           </s-text>
           {transfer.shippedAt && (
             <s-text>
-              Shipped {formatShopTime(transfer.shippedAt, timeZone)} by{" "}
+              {inParts ? "First shipment" : "Shipped"}{" "}
+              {formatShopTime(transfer.shippedAt, timeZone)} by{" "}
               {staffText(transfer.shippedByUserId)}
             </s-text>
           )}
@@ -659,9 +724,14 @@ export default function TransferDetail() {
             {totals.lineCount === 0
               ? "No items yet"
               : draft || transfer.status === "CANCELLED"
-                ? `${itemCount(totals.lineCount)}, ${unitCount(draft ? totals.shipUnits : totals.requestedUnits)} ${draft ? "to ship" : "requested"}`
+                ? `${itemCount(totals.lineCount)}, ${unitCount(draft ? totals.shipUnits : totals.requestedUnits)} ${draft ? (inParts && laterUnits > 0 ? `to ship now, ${laterUnits.toLocaleString("en-US")} later` : "to ship") : "requested"}`
                 : [
                     `${itemCount(totals.lineCount)}, ${unitCount(totals.shipUnits)} shipped`,
+                    ...(totals.toShipUnits > 0
+                      ? [
+                          `${totals.toShipUnits.toLocaleString("en-US")} still to ship`,
+                        ]
+                      : []),
                     `${totals.receivedUnits.toLocaleString("en-US")} received`,
                     ...(totals.countedInUnits > 0
                       ? [
@@ -867,7 +937,9 @@ export default function TransferDetail() {
                 <s-table-header listSlot="primary">Item</s-table-header>
                 <s-table-header>SKU</s-table-header>
                 <s-table-header listSlot="secondary">Quantity</s-table-header>
-                <s-table-header>Picked to ship</s-table-header>
+                <s-table-header>
+                  {inParts ? "Ship now" : "Picked to ship"}
+                </s-table-header>
                 <s-table-header>Remove</s-table-header>
               </s-table-header-row>
               <s-table-body>
@@ -898,7 +970,7 @@ export default function TransferDetail() {
                         lineId={line.id}
                         name="pickedQty"
                         label={`Picked quantity of ${line.title}`}
-                        value={transferShipQuantity(line)}
+                        value={transferShipQuantity(line, inParts)}
                         max={line.quantity}
                         locked={locked}
                         onEnter={onEnter}
@@ -929,6 +1001,12 @@ export default function TransferDetail() {
                 <s-table-header listSlot="primary">Item</s-table-header>
                 <s-table-header>SKU</s-table-header>
                 <s-table-header format="numeric">Shipped</s-table-header>
+                {inParts && (
+                  <s-table-header format="numeric">
+                    Still to ship
+                  </s-table-header>
+                )}
+                {inParts && <s-table-header>Ship now</s-table-header>}
                 <s-table-header format="numeric">Received</s-table-header>
                 <s-table-header>Counted in</s-table-header>
                 <s-table-header>Rejected</s-table-header>
@@ -944,6 +1022,26 @@ export default function TransferDetail() {
                     </s-table-cell>
                     <s-table-cell>{line.sku ?? ""}</s-table-cell>
                     <s-table-cell>{line.shipQty}</s-table-cell>
+                    {inParts && <s-table-cell>{line.toShipQty}</s-table-cell>}
+                    {inParts && (
+                      <s-table-cell>
+                        {shippable && line.toShipQty > 0 ? (
+                          <LineQuantityForm
+                            key={`shipNow:${line.pickedQty}`}
+                            intent="pick"
+                            lineId={line.id}
+                            name="pickedQty"
+                            label={`Units of ${line.title} to ship now`}
+                            value={line.pickedQty}
+                            max={line.toShipQty}
+                            locked={locked}
+                            onEnter={onEnter}
+                          />
+                        ) : (
+                          line.pickedQty
+                        )}
+                      </s-table-cell>
+                    )}
                     <s-table-cell>{line.receivedQty}</s-table-cell>
                     <s-table-cell>
                       {/* Units counted in stay editable, so they can always be set back to 0. */}
@@ -1065,8 +1163,15 @@ export default function TransferDetail() {
 
           {draft && totals.lineCount > 0 && (
             <s-text color="subdued">
-              An item ships its full quantity unless a smaller picked quantity
-              is saved for it.
+              {inParts
+                ? "Only the units saved under Ship now leave with the first shipment. The rest stays on this transfer and ships later."
+                : "An item ships its full quantity unless a smaller picked quantity is saved for it."}
+            </s-text>
+          )}
+          {shippable && (
+            <s-text color="subdued">
+              Under Ship now, save the units of each item that leave with the
+              next shipment.
             </s-text>
           )}
 
@@ -1096,18 +1201,55 @@ export default function TransferDetail() {
                   type="submit"
                   variant="primary"
                   {...disabledWhen(
-                    locked || !writesEnabled || totals.lineCount === 0,
+                    locked ||
+                      !writesEnabled ||
+                      totals.lineCount === 0 ||
+                      (inParts && totals.shipUnits === 0),
                   )}
                 >
-                  Ship transfer
+                  {inParts
+                    ? `Ship ${unitCount(totals.shipUnits)} now`
+                    : "Ship transfer"}
                 </s-button>
                 <s-text color="subdued">
                   Takes {unitCount(totals.shipUnits)} out of stock at{" "}
                   {sourceName} in Shopify. They enter stock at {destinationName}{" "}
                   when they are received.
+                  {inParts &&
+                    laterUnits > 0 &&
+                    ` The other ${unitCount(laterUnits)} ${laterUnits === 1 ? "stays" : "stay"} on the transfer to ship later.`}
                 </s-text>
               </s-stack>
             </Form>
+            {/* Not while a shipment stopped part-way: it finishes as it was started. */}
+            {!sourceShort &&
+              totals.lineCount > 0 &&
+              attention !== "SHIPMENT_UNFINISHED" && (
+                <Form method="post">
+                  <input type="hidden" name="intent" value="shipsInParts" />
+                  <input
+                    type="hidden"
+                    name="value"
+                    value={inParts ? "0" : "1"}
+                  />
+                  <s-stack direction="inline" gap="small" alignItems="center">
+                    <s-button
+                      type="submit"
+                      variant="secondary"
+                      {...disabledWhen(locked)}
+                    >
+                      {inParts
+                        ? "Ship everything in one shipment instead"
+                        : "Ship in several shipments"}
+                    </s-button>
+                    <s-text color="subdued">
+                      {inParts
+                        ? "One shipment takes the full quantity of every item, or the picked quantity where one is saved."
+                        : "For a transfer that leaves in more than one box or on more than one day: ship part now and the rest later."}
+                    </s-text>
+                  </s-stack>
+                </Form>
+              )}
             {sourceShort && (
               <Form method="post">
                 <input type="hidden" name="intent" value="ship" />
@@ -1171,6 +1313,63 @@ export default function TransferDetail() {
         </s-section>
       )}
 
+      {shippable && (
+        <s-section heading="Ship the next shipment">
+          <s-stack direction="block" gap="base">
+            <Form method="post">
+              <input type="hidden" name="intent" value="shipNext" />
+              <s-stack direction="inline" gap="small" alignItems="center">
+                <s-button
+                  type="submit"
+                  variant="primary"
+                  {...disabledWhen(
+                    locked ||
+                      !writesEnabled ||
+                      (totals.nextShipmentUnits === 0 &&
+                        attention !== "NEXT_SHIPMENT_UNFINISHED"),
+                  )}
+                >
+                  {totals.nextShipmentUnits === 0 &&
+                  attention === "NEXT_SHIPMENT_UNFINISHED"
+                    ? "Finish the shipment"
+                    : `Ship ${unitCount(totals.nextShipmentUnits)} now`}
+                </s-button>
+                <s-text color="subdued">
+                  {unitCount(totals.toShipUnits)} of this transfer{" "}
+                  {totals.toShipUnits === 1 ? "has" : "have"} not shipped yet.
+                  Shipping takes the units saved under Ship now out of stock at{" "}
+                  {sourceName} in Shopify.
+                </s-text>
+              </s-stack>
+            </Form>
+            {sourceShort && (
+              <Form method="post">
+                <input type="hidden" name="intent" value="shipNext" />
+                <input type="hidden" name="allowShortSource" value="1" />
+                <s-stack direction="inline" gap="small" alignItems="center">
+                  <s-button
+                    type="submit"
+                    variant="secondary"
+                    tone="critical"
+                    {...disabledWhen(locked || !writesEnabled)}
+                  >
+                    Ship anyway
+                  </s-button>
+                  <s-text>
+                    Stock of the items listed above will go below zero at{" "}
+                    {sourceName}.
+                  </s-text>
+                </s-stack>
+              </Form>
+            )}
+            <s-text color="subdued">
+              If the rest will not ship, close the transfer below: units that
+              did not ship stay in stock at {sourceName}.
+            </s-text>
+          </s-stack>
+        </s-section>
+      )}
+
       {attention === "PUT_BACK_UNFINISHED" && (
         <s-section heading="Put stock back">
           <Form method="post">
@@ -1226,7 +1425,10 @@ export default function TransferDetail() {
                   </s-button>
                   <s-text color="subdued">
                     Everything still to come arrived: adds it to stock at{" "}
-                    {destinationName} in Shopify and finishes the transfer.
+                    {destinationName} in Shopify
+                    {totals.toShipUnits > 0
+                      ? ". The transfer stays open for the units still to ship."
+                      : " and finishes the transfer."}
                   </s-text>
                 </s-stack>
               </Form>
@@ -1261,6 +1463,8 @@ export default function TransferDetail() {
                 </s-button>
                 <s-text color="subdued">
                   Every shipped unit is received or rejected.
+                  {totals.toShipUnits > 0 &&
+                    ` ${unitCount(totals.toShipUnits)} that did not ship ${totals.toShipUnits === 1 ? "stays" : "stay"} in stock at ${sourceName} and can no longer ship on this transfer.`}
                 </s-text>
               </s-stack>
             </Form>
@@ -1273,7 +1477,8 @@ export default function TransferDetail() {
                   {confirming === "RETURNED"
                     ? `Close this transfer and add ${unitCount(totals.outstandingUnits)} back to stock at ${sourceName} in Shopify?`
                     : `Close this transfer and write off ${unitCount(totals.outstandingUnits)}? They stay out of stock at both locations.`}{" "}
-                  Nothing more can be received afterwards.
+                  Nothing more can be received
+                  {totals.toShipUnits > 0 ? " or shipped" : ""} afterwards.
                 </s-text>
                 <s-button
                   type="submit"

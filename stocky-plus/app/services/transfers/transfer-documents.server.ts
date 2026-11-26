@@ -122,7 +122,7 @@ export async function readTransferPaper(
   ]);
   const place = (locationId: string) =>
     placeOf(locations.find((row) => row.shopifyGid === locationId));
-  const totals = transferTotals(transfer.status, lines);
+  const totals = transferTotals(transfer.status, lines, transfer.shipsInParts);
 
   return {
     reference: transferReference(transfer.id),
@@ -358,16 +358,28 @@ function transferSummary(paper: TransferPaper): string {
   if (totals.lineCount === 0) return "No items yet";
   const items = itemCount(totals.lineCount);
   switch (transfer.status) {
-    case "DRAFT":
-      return `${items}, ${unitCount(totals.shipUnits)} to send`;
+    case "DRAFT": {
+      // A transfer that ships in parts sends only the units entered for its
+      // first shipment; the rest of what it asks for follows later.
+      const later = transfer.shipsInParts
+        ? totals.requestedUnits - totals.shipUnits
+        : 0;
+      return later > 0
+        ? `${items}, ${unitCount(totals.shipUnits)} to send now, ${number(later)} to ship later`
+        : `${items}, ${unitCount(totals.shipUnits)} to send`;
+    }
     case "CANCELLED":
       return `${items}, ${unitCount(totals.requestedUnits)} asked for, none sent`;
     case "IN_TRANSIT": {
       const arrived =
         totals.receivedUnits + totals.countedInUnits + totals.rejectedUnits;
+      const sent =
+        totals.toShipUnits > 0
+          ? `${items}, ${unitCount(totals.shipUnits)} sent so far, ${number(totals.toShipUnits)} still to ship`
+          : `${items}, ${unitCount(totals.shipUnits)} sent`;
       return arrived > 0
-        ? `${items}, ${unitCount(totals.shipUnits)} sent, ${number(arrived)} already counted at the destination`
-        : `${items}, ${unitCount(totals.shipUnits)} sent`;
+        ? `${sent}, ${number(arrived)} already counted at the destination`
+        : sent;
     }
     case "RECEIVED":
       return `${items}, ${unitCount(totals.shipUnits)} sent, ${number(totals.receivedUnits)} received`;

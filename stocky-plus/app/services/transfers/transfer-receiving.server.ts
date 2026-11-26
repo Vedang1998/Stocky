@@ -21,7 +21,10 @@ import {
   LINE_NOT_FOUND_MESSAGE,
   loadTransfer,
   lockTransferIn,
+  NEXT_SHIPMENT_UNFINISHED_MESSAGE,
+  NO_SHIPMENT_RECORD_MESSAGE,
   NOT_IN_TRANSIT_MESSAGE,
+  RETURN_UNFINISHED_MESSAGE,
   settleTransferDocument,
   SHOPIFY_MANAGED_MESSAGE,
   SWITCHED_OFF_MESSAGE,
@@ -36,6 +39,7 @@ import {
   MAX_REJECT_NOTE_LENGTH,
   MAX_TRANSFER_LINE_QUANTITY,
   transferOutstandingQuantity,
+  transferUnshippedQuantity,
 } from "./transfer-quantities";
 
 /**
@@ -50,10 +54,6 @@ import {
  */
 
 const MAX_CODE_LENGTH = 255;
-const NO_SHIPMENT_RECORD_MESSAGE =
-  "ProPo has no complete record of this transfer leaving the source location, so it will not add stock at the destination.";
-const RETURN_UNFINISHED_MESSAGE =
-  "Closing this transfer was started and part of its stock is already back at the source, so nothing more can be received. Close the transfer again to finish.";
 
 const unitsText = (units: number) =>
   `${units.toLocaleString("en-US")} ${units === 1 ? "unit" : "units"}`;
@@ -73,12 +73,25 @@ const missingUnits = (lines: readonly TransferLine[]) =>
     0,
   );
 
+/** Units that have not left the source yet and ship later; none unless the transfer ships in parts. */
+const unitsStillToShip = (transfer: {
+  shipsInParts: boolean;
+  lineItems: readonly TransferLine[];
+}) =>
+  transfer.shipsInParts
+    ? transfer.lineItems.reduce(
+        (sum, line) => sum + transferUnshippedQuantity(line),
+        0,
+      )
+    : 0;
+
 const LINE_QUANTITIES_SELECT = {
   id: true,
   transferOrderId: true,
   shopifyVariantId: true,
   quantity: true,
   pickedQty: true,
+  shippedQty: true,
   receivedQty: true,
   pendingReceiveQty: true,
   rejectedQty: true,
@@ -385,7 +398,7 @@ export type PostReceiptResult =
       alreadyDone: boolean;
       /** Units this receipt added to stock at the destination. */
       receivedUnits: number;
-      /** Every shipped unit is now received or rejected; the transfer is finished. */
+      /** Every shipped unit is now received or rejected and nothing is left to ship; the transfer is finished. */
       completed: boolean;
     }
   | TransferMovementFailure;
@@ -393,6 +406,13 @@ export type PostReceiptResult =
 export interface ReceiveTransferOptions extends ExecuteInventoryOperationOptions {
   now?: () => Date;
 }
+
+const ALREADY_RECEIVED = {
+  ok: true,
+  alreadyDone: true,
+  receivedUnits: 0,
+  completed: true,
+} as const;
 
 /**
  * Whether stock may be added at the destination for a transfer in transit:
@@ -408,10 +428,13 @@ async function shipmentProblem(
   if (!state.unfinishedOperationId && state.outstanding.length === 0) {
     return null;
   }
-  // The shipment was whole when the transfer went in transit; only an
-  // unfinished close can have put part of it back since.
-  return state.operationCount === 0
-    ? NO_SHIPMENT_RECORD_MESSAGE
+  if (state.operationCount === 0) return NO_SHIPMENT_RECORD_MESSAGE;
+  // The shipment was whole when the transfer went in transit. Since then an
+  // unfinished close can have put part of it back, or, on a transfer that
+  // ships in parts, an unfinished later shipment can have taken more out.
+  return transfer.shipsInParts &&
+    !state.outstanding.some((line) => line.delta < 0)
+    ? NEXT_SHIPMENT_UNFINISHED_MESSAGE
     : RETURN_UNFINISHED_MESSAGE;
 }
 
@@ -432,9 +455,7 @@ export async function postTransferReceipt(
 ): Promise<PostReceiptResult> {
   const transfer = await loadTransfer(db, transferId);
   if (!transfer) return fail(TRANSFER_NOT_FOUND_MESSAGE);
-  if (transfer.status === "RECEIVED") {
-    return { ok: true, alreadyDone: true, receivedUnits: 0, completed: true };
-  }
+  if (transfer.status === "RECEIVED") return ALREADY_RECEIVED;
   const refused = notReceivable(transfer);
   if (refused) return fail(refused);
   if (!isSwitchedOn(options)) return fail(SWITCHED_OFF_MESSAGE);
@@ -494,7 +515,9 @@ export async function postTransferReceipt(
       });
     }
     // Counted-in units are now received, so what is missing is unchanged.
-    const completed = missingUnits(current.lineItems) === 0;
+    // Units that have not shipped yet keep the transfer open for them.
+    const completed =
+      missingUnits(current.lineItems) === 0 && unitsStillToShip(current) === 0;
     if (completed) {
       await tx.transferOrder.update({
         where: { id: transfer.id },
@@ -516,7 +539,7 @@ export async function postTransferReceipt(
   if (outcome === "not_in_transit") {
     const now = await loadTransfer(db, transfer.id);
     return now?.status === "RECEIVED"
-      ? { ok: true, alreadyDone: true, receivedUnits: 0, completed: true }
+      ? ALREADY_RECEIVED
       : fail(NOT_IN_TRANSIT_MESSAGE);
   }
   return { ok: true, alreadyDone: false, ...outcome };
@@ -535,9 +558,7 @@ export async function receiveTransfer(
 ): Promise<PostReceiptResult> {
   const transfer = await loadTransfer(db, transferId);
   if (!transfer) return fail(TRANSFER_NOT_FOUND_MESSAGE);
-  if (transfer.status === "RECEIVED") {
-    return { ok: true, alreadyDone: true, receivedUnits: 0, completed: true };
-  }
+  if (transfer.status === "RECEIVED") return ALREADY_RECEIVED;
   // Refusals come before anything is counted in, so a refused request leaves
   // the transfer as it was.
   const refused = notReceivable(transfer);
@@ -554,7 +575,7 @@ export async function receiveTransfer(
   if (!stillInTransit) {
     const now = await loadTransfer(db, transfer.id);
     return now?.status === "RECEIVED"
-      ? { ok: true, alreadyDone: true, receivedUnits: 0, completed: true }
+      ? ALREADY_RECEIVED
       : fail(NOT_IN_TRANSIT_MESSAGE);
   }
   return postTransferReceipt(db, admin, actor, transferId, options);
@@ -672,15 +693,18 @@ export async function closeTransfer(
     ) {
       return "changed" as const;
     }
-    if (returning) {
-      for (const line of current.lineItems) {
-        const back = returning(line);
-        if (back === 0) continue;
-        await tx.transferLineItem.update({
-          where: { id: line.id },
-          data: { returnedQty: line.returnedQty + back },
-        });
-      }
+    for (const line of current.lineItems) {
+      const back = returning ? returning(line) : 0;
+      // Nothing more ships once the transfer is closed, so units picked for
+      // a next shipment are no longer picked for anything.
+      const picked = current.shipsInParts
+        ? (line.shippedQty ?? line.pickedQty)
+        : line.pickedQty;
+      if (back === 0 && picked === line.pickedQty) continue;
+      await tx.transferLineItem.update({
+        where: { id: line.id },
+        data: { returnedQty: line.returnedQty + back, pickedQty: picked },
+      });
     }
     await tx.transferOrder.update({
       where: { id: transfer.id },
@@ -689,6 +713,7 @@ export async function closeTransfer(
         receivedAt: closedAt,
         receivedByUserId: actor.shopifyUserId,
         shortResolution: resolution,
+        shipsInParts: false,
       },
     });
     return "closed" as const;

@@ -27,6 +27,8 @@ export type TransferLine = {
   /** Units the transfer asked for. */
   quantity: number;
   pickedQty: number;
+  /** Units that left the source; null on a line that keeps them in `pickedQty`. */
+  shippedQty?: number | null;
   receivedQty: number;
 };
 
@@ -59,6 +61,7 @@ type TransferLineRow = {
   shopifyVariantId: string;
   quantity: number;
   pickedQty: number;
+  shippedQty: number | null;
   receivedQty: number;
 };
 
@@ -203,6 +206,7 @@ export async function loadTransferLines(
       shopifyVariantId: true,
       quantity: true,
       pickedQty: true,
+      shippedQty: true,
       receivedQty: true,
     },
   );
@@ -222,6 +226,7 @@ export async function loadTransferLines(
       variantGid: line.shopifyVariantId,
       quantity: line.quantity,
       pickedQty: line.pickedQty,
+      shippedQty: line.shippedQty,
       receivedQty: line.receivedQty,
     };
   });

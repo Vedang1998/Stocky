@@ -14,7 +14,9 @@ import {
 import {
   transferOutstandingQuantity,
   transferShipQuantity,
+  transferShipsInParts,
   transferTotals,
+  transferUnshippedQuantity,
   transferWrittenOffQuantity,
   type TransferLedgerStanding,
   type TransferLineQuantities,
@@ -41,6 +43,8 @@ export interface TransferHeader {
   /** Set when the transfer was shipped as a Shopify transfer; ProPo moves no stock for it. */
   shopifyTransferId: string | null;
   shortResolution: TransferShortResolution | null;
+  /** Units that have not shipped yet stay on the transfer and ship later. */
+  shipsInParts: boolean;
   createdAt: Date;
   createdByUserId: string | null;
   shippedAt: Date | null;
@@ -68,6 +72,8 @@ export interface TransferLineView extends TransferLineQuantities {
   outstandingQty: number;
   /** Units that never arrived and were written off when the transfer was closed. */
   writtenOffQty: number;
+  /** Units that have not left the source yet and ship later; 0 unless the transfer is in transit and ships in parts. */
+  toShipQty: number;
 }
 
 const HEADER_SELECT = {
@@ -78,6 +84,7 @@ const HEADER_SELECT = {
   notes: true,
   shopifyTransferId: true,
   shortResolution: true,
+  shipsInParts: true,
   createdAt: true,
   createdByUserId: true,
   shippedAt: true,
@@ -94,6 +101,7 @@ const LINE_SELECT = {
   shopifyVariantId: true,
   quantity: true,
   pickedQty: true,
+  shippedQty: true,
   receivedQty: true,
   pendingReceiveQty: true,
   rejectedQty: true,
@@ -163,10 +171,15 @@ export async function listTransfers(
   }
 
   return {
-    transfers: page.map((transfer) => ({
-      ...transfer,
-      totals: transferTotals(transfer.status, linesOf.get(transfer.id) ?? []),
-    })),
+    transfers: page.map((transfer) => {
+      const own = linesOf.get(transfer.id) ?? [];
+      const shipsInParts = transferShipsInParts(transfer, own);
+      return {
+        ...transfer,
+        shipsInParts,
+        totals: transferTotals(transfer.status, own, shipsInParts),
+      };
+    }),
     hasMore: rows.length > TRANSFER_LIST_PAGE_SIZE,
   };
 }
@@ -175,17 +188,35 @@ export async function getTransfer(
   db: TenantDb,
   transferId: string,
 ): Promise<TransferHeader | null> {
-  return (await db.transferOrder.findFirst({
+  const header = (await db.transferOrder.findFirst({
     where: { id: transferId },
     select: HEADER_SELECT,
   })) as TransferHeader | null;
+  if (header?.status !== "IN_TRANSIT" || !header.shipsInParts) return header;
+  // Read by the same rule as the services (`transferShipsInParts`): one line
+  // that does not say what it shipped, and the transfer shipped in one go.
+  const unsaid = (await db.transferLineItem.findFirst({
+    where: { transferOrderId: transferId, shippedQty: null },
+    select: { id: true },
+  })) as { id: string } | null;
+  return unsaid ? { ...header, shipsInParts: false } : header;
 }
+
+/** The part of a transfer its lines are read against. */
+type TransferStanding = Pick<TransferHeader, "id" | "status" | "shipsInParts">;
+
+/** Units of a line still to ship: only a transfer in transit that ships in parts has any. */
+const toShipQuantity = (transfer: TransferStanding, row: LineRow) =>
+  transfer.status === "IN_TRANSIT" && transfer.shipsInParts
+    ? transferUnshippedQuantity(row)
+    : 0;
 
 async function describeLines(
   db: TenantDb,
-  status: TransferStatus,
+  transfer: TransferStanding,
   rows: readonly LineRow[],
 ): Promise<TransferLineView[]> {
+  const { status } = transfer;
   const catalog = await findVariantsById(
     db,
     rows.map((row) => row.shopifyVariantId),
@@ -200,17 +231,22 @@ async function describeLines(
       barcode: variant?.barcode ?? null,
       quantity: row.quantity,
       pickedQty: row.pickedQty,
+      shippedQty: row.shippedQty ?? null,
       receivedQty: row.receivedQty,
       pendingReceiveQty: row.pendingReceiveQty,
       rejectedQty: row.rejectedQty,
       rejectNote: row.rejectNote,
       returnedQty: row.returnedQty,
-      shipQty: status === "CANCELLED" ? 0 : transferShipQuantity(row),
+      shipQty:
+        status === "CANCELLED"
+          ? 0
+          : transferShipQuantity(row, transfer.shipsInParts),
       outstandingQty:
         status === "IN_TRANSIT"
           ? Math.max(0, transferOutstandingQuantity(row))
           : 0,
       writtenOffQty: transferWrittenOffQuantity(status, row),
+      toShipQty: toShipQuantity(transfer, row),
     };
   });
 }
@@ -232,7 +268,7 @@ const readLineRows = async (
 export async function getTransferLines(
   db: TenantDb,
   input: {
-    transfer: { id: string; status: TransferStatus };
+    transfer: TransferStanding;
     filter: TransferLineFilter;
     page: number;
   },
@@ -246,14 +282,16 @@ export async function getTransferLines(
 }> {
   const { transfer } = input;
   const rows = await readLineRows(db, transfer.id);
-  // Whether a line is open depends on five of its own columns, which a
+  // Whether a line is open depends on several of its own columns, which a
   // database filter cannot add up; a transfer's lines are few enough to
   // narrow here.
   const kept =
     input.filter === "open" && transfer.status === "IN_TRANSIT"
       ? rows.filter(
           (row) =>
-            transferOutstandingQuantity(row) > 0 || row.pendingReceiveQty > 0,
+            transferOutstandingQuantity(row) > 0 ||
+            row.pendingReceiveQty > 0 ||
+            toShipQuantity(transfer, row) > 0,
         )
       : rows;
   const pageCount = Math.max(
@@ -265,25 +303,25 @@ export async function getTransferLines(
   return {
     lines: await describeLines(
       db,
-      transfer.status,
+      transfer,
       kept.slice(start, start + TRANSFER_LINE_PAGE_SIZE),
     ),
     total: kept.length,
     page,
     pageCount,
-    totals: transferTotals(transfer.status, rows),
+    totals: transferTotals(transfer.status, rows, transfer.shipsInParts),
   };
 }
 
 /** Every line of a transfer, for the transfer report. */
 export async function listTransferLinesForExport(
   db: TenantDb,
-  transfer: { id: string; status: TransferStatus },
+  transfer: TransferStanding,
 ): Promise<TransferLineView[]> {
   const rows = await readLineRows(db, transfer.id);
   const lines: TransferLineView[] = [];
   for (const part of chunked(rows, LOOKUP_CHUNK)) {
-    lines.push(...(await describeLines(db, transfer.status, part)));
+    lines.push(...(await describeLines(db, transfer, part)));
   }
   return lines;
 }
@@ -297,6 +335,8 @@ export interface TransferEvent {
   status: InventoryOperationStatus;
   /** Shopify has not finished answering this request. */
   unfinished: boolean;
+  /** The request puts stock back where it came from: a cancelled shipment or a close that returns units. */
+  putsBack?: boolean;
   /** Net units Shopify confirmed: negative when stock left the location, positive when it arrived. */
   netUnits: number;
   /** Changes Shopify refused. */
@@ -320,6 +360,7 @@ export async function getTransferHistory(
       id: true,
       sourceType: true,
       status: true,
+      reason: true,
       actorShopifyUserId: true,
       actorDisplayName: true,
       failedLineCount: true,
@@ -331,6 +372,7 @@ export async function getTransferHistory(
     id: string;
     sourceType: string;
     status: InventoryOperationStatus;
+    reason: string;
     actorShopifyUserId: string | null;
     actorDisplayName: string | null;
     failedLineCount: number;
@@ -365,6 +407,7 @@ export async function getTransferHistory(
         staffName: operation.actorDisplayName,
         status: operation.status,
         unfinished: !TERMINAL_OPERATION_STATUSES.has(operation.status),
+        putsBack: operation.reason === "movement_canceled",
         netUnits: netUnits.get(operation.id) ?? 0,
         refusedChangeCount:
           operation.failedLineCount + operation.conflictLineCount,
@@ -389,6 +432,7 @@ export function transferLedgerStanding(
       standing.shipmentRequests += 1;
       standing.unitsOutOfSource -= event.netUnits;
       standing.shipmentUnfinished ||= event.unfinished;
+      if (event.unfinished && event.putsBack) standing.returnUnfinished = true;
     } else {
       standing.unitsIntoDestination += event.netUnits;
       standing.receiptUnfinished ||= event.unfinished;
