@@ -1,0 +1,167 @@
+name: Dev-store E2E
+
+# Runs the ProPo app inside the runner against the dev test store
+# (stocky-test-store.myshopify.com) and drives it with Playwright, so store
+# tests no longer need the owner's Mac. See stocky-plus/docs/STORE_E2E.md.
+#
+# Not triggered by pull_request: the run needs the store-e2e environment
+# secret and changes shared test-store state, so it is started on purpose:
+# by hand, nightly, or by pushing a branch named store-e2e/<name>.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["store-e2e/*"]
+  schedule:
+    # Nightly on main, 07:30 UTC.
+    - cron: "30 7 * * *"
+
+permissions:
+  contents: read
+
+# One run at a time per branch. Runs on different branches may overlap;
+# they only read the test store, since every write switch is off.
+concurrency:
+  group: store-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  store-e2e:
+    name: Dev-store E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: store-e2e
+    defaults:
+      run:
+        working-directory: stocky-plus
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: stocky
+          POSTGRES_PASSWORD: stocky
+          POSTGRES_DB: stocky_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stocky -d stocky_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_e2e
+      STOCKY_BOOTSTRAP_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_e2e  # pragma: allowlist secret
+      # Run-only role passwords for the throwaway database in this runner.
+      DATABASE_RUNTIME_URL: postgresql://stocky_runtime:stocky_runtime_e2e_only@localhost:5432/stocky_e2e  # pragma: allowlist secret
+      STOCKY_RUNTIME_ROLE: stocky_runtime
+      STOCKY_RUNTIME_ROLE_PASSWORD: stocky_runtime_e2e_only  # pragma: allowlist secret
+      STOCKY_CONTROL_PLANE_ROLE_PASSWORD: stocky_control_plane_e2e_only  # pragma: allowlist secret
+      DATABASE_CONTROL_PLANE_URL: postgresql://stocky_control_plane:stocky_control_plane_e2e_only@localhost:5432/stocky_e2e  # pragma: allowlist secret
+      STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK: "1"
+      STOCKY_REQUIRE_RUNTIME_DB_URL: "0"
+      STOCKY_DISPATCHER_PROCESS_COUNT: "1"
+      REDIS_URL: redis://localhost:6379
+      # Client ID of the dev-only "ProPo E2E (test store only)" app,
+      # installed on the test store alone. Its client secret is passed only
+      # to the steps that need it, never to dependency installs or the build.
+      SHOPIFY_API_KEY: ${{ vars.SHOPIFY_API_KEY }}
+      SHOPIFY_APP_URL: http://localhost:3000
+      SCOPES: read_products,write_products,read_inventory,write_inventory,read_orders,read_locations
+      # Every inventory-write switch stays off outside local dev.
+      FEATURE_STOCKTAKE_INVENTORY_WRITES: "false"
+      FEATURE_ADJUSTMENT_WRITES: "false"
+      FEATURE_RECEIPT_WRITES: "false"
+      FEATURE_COST_SYNC: "false"
+      FEATURE_TRANSFER_WRITES: "false"
+      FEATURE_PR5_ABSENCE_TOMBSTONE: "false"
+      ALLOW_DEV_SUBSCRIPTION_ACTIVATE: "false"
+
+    steps:
+      # Actions pinned by commit for the one job that holds a store secret.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Require the store-e2e credentials
+        working-directory: .
+        env:
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
+        run: |
+          if [ -z "${SHOPIFY_API_KEY}" ] || [ -z "${SHOPIFY_API_SECRET}" ]; then
+            echo "The store-e2e environment needs variable SHOPIFY_API_KEY and secret SHOPIFY_API_SECRET." >&2
+            exit 1
+          fi
+
+      - name: Generate run-only secrets
+        working-directory: .
+        run: |
+          key="$(openssl rand -base64 32)"
+          envelope="$(openssl rand -base64 48)"
+          echo "::add-mask::${key}"
+          echo "::add-mask::${envelope}"
+          echo "SESSION_TOKEN_ENCRYPTION_KEY=${key}" >> "${GITHUB_ENV}"
+          echo "TENANT_JOB_ENVELOPE_SECRET=${envelope}" >> "${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.19.0"
+          cache: npm
+          cache-dependency-path: stocky-plus/package-lock.json
+
+      - name: Pin npm
+        working-directory: .
+        run: npm install -g npm@11.5.2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare database
+        run: ./scripts/store-e2e/prepare-db.sh
+
+      - name: Build app
+        run: npm run build
+
+      - name: Run dev-store E2E
+        env:
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
+          STORE_E2E_LOG_DIR: e2e-logs
+        run: ./scripts/store-e2e/run.sh
+
+      # The artifact is downloadable by any signed-in GitHub user, and masking
+      # does not apply to files, so nothing is uploaded unless this passes.
+      - name: Credential scan self-test
+        if: ${{ !cancelled() }}
+        run: bash scripts/store-e2e/scan-artifacts.test.sh
+
+      - name: Check report and logs for credentials
+        id: artifact_scan
+        if: ${{ !cancelled() }}
+        env:
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
+        run: ./scripts/store-e2e/scan-artifacts.sh e2e-report e2e-results e2e-logs
+
+      - name: Upload report and logs
+        if: ${{ !cancelled() && steps.artifact_scan.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: store-e2e-report
+          path: |
+            stocky-plus/e2e-report
+            stocky-plus/e2e-results
+            stocky-plus/e2e-logs
+          retention-days: 7

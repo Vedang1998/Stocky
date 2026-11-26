@@ -3,7 +3,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["app/**/*.test.ts", "extensions/*/src/**/*.test.ts"],
+    include: [
+      "app/**/*.test.ts",
+      "extensions/*/src/**/*.test.ts",
+      "e2e/support/**/*.test.ts",
+    ],
     // Tenant-access PostgreSQL integration tests run under vitest.tenant-access.config.ts
     // Sync control-plane integration tests run under vitest.sync-integration.config.ts
     // (fileParallelism: false — must not share disposable DB with default unit suite).
