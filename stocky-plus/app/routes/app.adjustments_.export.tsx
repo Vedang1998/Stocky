@@ -25,6 +25,7 @@ const headers = (timeZone: string | null) => [
   "Type",
   "Status",
   "Reason",
+  "Shopify reason",
   "Location",
   "Staff ID",
   "Item",
@@ -93,6 +94,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         shopTimeCell(entry.createdAt, timeZone),
         entry.kind === "REVERSAL" ? "Reversal" : "Adjustment",
         STATUS_TEXT[entry.status],
+        entry.reasonLabel ?? adjustmentReasonLabel(entry.reason),
         adjustmentReasonLabel(entry.reason),
         entry.locationId
           ? (locationNames.get(entry.locationId) ?? entry.locationId)

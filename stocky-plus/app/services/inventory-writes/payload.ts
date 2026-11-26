@@ -13,6 +13,8 @@ import {
 export const MAX_OPERATION_LINES = 5000;
 /** Shopify rejects quantities beyond ±1,000,000,000. */
 export const MAX_ABS_QUANTITY = 1_000_000_000;
+/** Width of InventoryOperation.reasonLabel. */
+export const MAX_REASON_LABEL_LENGTH = 60;
 
 const INVENTORY_ITEM_GID = /^gid:\/\/shopify\/InventoryItem\/\d{1,20}$/;
 const LOCATION_GID = /^gid:\/\/shopify\/Location\/\d{1,20}$/;
@@ -124,6 +126,12 @@ export function normalizeInventoryOperationDraft(
     issues.push("referenceDocumentUri must be a URI");
   }
   const note = normalizeOptionalText(draft.note, 2000, "note", issues);
+  const reasonLabel = normalizeOptionalText(
+    draft.reasonLabel,
+    MAX_REASON_LABEL_LENGTH,
+    "reasonLabel",
+    issues,
+  );
   const actor = normalizeActor(draft.actor, issues);
 
   const lines = Array.isArray(draft.lines) ? draft.lines : [];
@@ -181,6 +189,7 @@ export function normalizeInventoryOperationDraft(
     idempotencyKey: draft.idempotencyKey,
     source: { type: draft.source.type, id: sourceId },
     reason: draft.reason,
+    reasonLabel,
     quantityName: draft.quantityName,
     referenceDocumentUri,
     actor,
@@ -197,8 +206,9 @@ export function normalizeInventoryOperationDraft(
 }
 
 /**
- * Digest of everything that determines the Shopify effect. Actor and note are
- * metadata: a resubmission by another staff member is still the same change.
+ * Digest of everything that determines the Shopify effect. Actor, note and
+ * the merchant's name for the reason are metadata: a resubmission by another
+ * staff member is still the same change.
  */
 export function inventoryOperationPayloadDigest(
   draft: NormalizedInventoryOperationDraft,

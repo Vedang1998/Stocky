@@ -2,12 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   ADJUSTMENT_REASONS,
   MAX_ADJUSTMENT_LINES,
+  MAX_ADJUSTMENT_REASON_NAME_LENGTH,
   MAX_ADJUSTMENT_TEXT_LENGTH,
   adjustmentReasonLabel,
   isAdjustmentMode,
   isAdjustmentReason,
+  isBuiltInReasonName,
+  normalizeReasonName,
+  ownReasonValue,
   parseAdjustmentLines,
+  readOwnReasonId,
+  reasonNameKey,
 } from "./adjustment-input";
+import { MAX_REASON_LABEL_LENGTH } from "../inventory-writes/payload";
 import { SHOPIFY_INVENTORY_REASONS } from "../inventory-writes/types";
 
 const lines = (text: string, mode: "ADJUST" | "SET" = "ADJUST") => {
@@ -148,5 +155,67 @@ describe("adjustment reasons and modes", () => {
     expect(adjustmentReasonLabel("shrinkage")).toBe("Theft or loss");
     expect(adjustmentReasonLabel("correction")).toBe("Correction");
     expect(adjustmentReasonLabel("movement_created")).toBe("movement_created");
+  });
+});
+
+describe("the shop's own reasons", () => {
+  it("stores a name without the space around it or repeated inside it", () => {
+    expect(normalizeReasonName("  Sent  to\tphoto\u00a0studio \n")).toBe(
+      "Sent to photo studio",
+    );
+    expect(normalizeReasonName(" \t ")).toBe("");
+    // Full-width letters pasted from another program read as the same name.
+    expect(normalizeReasonName("\uff33\uff41\uff4d\uff50\uff4c\uff45")).toBe(
+      "Sample",
+    );
+  });
+
+  it("allows no name longer than the ledger keeps with an adjustment", () => {
+    expect(MAX_ADJUSTMENT_REASON_NAME_LENGTH).toBeLessThanOrEqual(
+      MAX_REASON_LABEL_LENGTH,
+    );
+  });
+
+  it("treats names that differ only in capitals as one name", () => {
+    expect(reasonNameKey("Staff Purchase")).toBe(
+      reasonNameKey("staff purchase"),
+    );
+    expect(reasonNameKey("Staff purchase")).not.toBe(
+      reasonNameKey("Staff purchases"),
+    );
+  });
+
+  it("recognises the built-in reasons by name, whatever the capitals", () => {
+    expect(isBuiltInReasonName("Damaged")).toBe(true);
+    expect(isBuiltInReasonName("THEFT OR LOSS")).toBe(true);
+    expect(isBuiltInReasonName("Damaged in transit")).toBe(false);
+  });
+
+  it("never mistakes a built-in reason code for one of the shop's own reasons, or the other way round", () => {
+    const value = ownReasonValue("cm3abc123");
+
+    expect(readOwnReasonId(value)).toBe("cm3abc123");
+    expect(isAdjustmentReason(value)).toBe(false);
+    for (const reason of ADJUSTMENT_REASONS) {
+      expect(readOwnReasonId(reason.code)).toBeNull();
+    }
+  });
+
+  it.each([
+    "own:",
+    "own:has space",
+    "own:../x",
+    "own:a,b",
+    `own:${"a".repeat(65)}`,
+    "OWN:abc",
+    " own:abc",
+    "abc",
+    "",
+    null,
+    undefined,
+    7,
+    ["own:abc"],
+  ])("reads no reason ID from %j", (value) => {
+    expect(readOwnReasonId(value)).toBeNull();
   });
 });

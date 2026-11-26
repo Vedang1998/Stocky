@@ -71,6 +71,10 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
   })),
 }));
 
+/** The shop's own reasons; none unless a test adds some. */
+const ownReasons = vi.hoisted(() => ({ listOwnAdjustmentReasons: vi.fn() }));
+vi.mock("./adjustments/adjustment-reasons.server", () => ownReasons);
+
 /** The shop's stored time zone; null, as before its first sync, unless a test sets one. */
 const shopClock = vi.hoisted(() => ({ readShopTimeZone: vi.fn() }));
 vi.mock("./inventory-writes/shop-clock.server", () => shopClock);
@@ -145,6 +149,7 @@ const entry = (
   kind: "ADJUSTMENT",
   status: "APPLIED",
   reason: "damaged",
+  reasonLabel: null,
   note: "Dropped a case",
   staffId: "42",
   locationId: LOCATION,
@@ -172,6 +177,7 @@ const LOADER_DATA = {
   planActive: true,
   writesEnabled: true,
   locations: [{ id: LOCATION, name: "Shop floor" }],
+  ownReasons: [] as Array<{ id: string; name: string; shopifyReason: string }>,
   history: [] as AdjustmentHistoryEntry[],
   olderCursor: null as string | null,
   filter: { from: "", to: "" },
@@ -203,6 +209,7 @@ beforeEach(() => {
   fetchLocations.mockResolvedValue(LOADER_DATA.locations);
   isInventoryWriteEnabled.mockReturnValue(false);
   service.listAdjustments.mockResolvedValue([]);
+  ownReasons.listOwnAdjustmentReasons.mockResolvedValue([]);
 });
 
 describe("Adjustments page action", () => {
@@ -458,6 +465,20 @@ describe("Adjustments page loader", () => {
     expect(second.submissionId).not.toBe(first.submissionId);
   });
 
+  it("hands the page the shop's own reasons", async () => {
+    const reasons = [
+      { id: "r1", name: "Staff purchase", shopifyReason: "other" },
+    ];
+    ownReasons.listOwnAdjustmentReasons.mockResolvedValue(reasons);
+
+    const data = await route.loader(get("/app/adjustments"));
+
+    expect(ownReasons.listOwnAdjustmentReasons).toHaveBeenCalledWith(
+      context.db,
+    );
+    expect(data.ownReasons).toEqual(reasons);
+  });
+
   it("reports whether adjustments are switched on", async () => {
     expect((await route.loader(get("/app/adjustments"))).writesEnabled).toBe(
       false,
@@ -539,6 +560,52 @@ describe("Adjustments page", () => {
     ]) {
       expect(html).toContain(label);
     }
+  });
+
+  it("lists the shop's own reasons after the built-in ones and links to where they are managed", () => {
+    const html = render({
+      ownReasons: [
+        { id: "r1", name: "Sent to photo studio", shopifyReason: "other" },
+        { id: "r2", name: "Staff purchase", shopifyReason: "promotion" },
+      ],
+    });
+
+    expect(html).toContain('value="own:r1"');
+    expect(html).toContain("Sent to photo studio");
+    expect(html).toContain('value="own:r2"');
+    expect(html.indexOf("Other")).toBeLessThan(
+      html.indexOf("Sent to photo studio"),
+    );
+    expect(html).toContain('href="/app/adjustments/reasons"');
+  });
+
+  it("puts the Reason select back on one of the shop's own reasons after a refused adjustment", () => {
+    const html = render(
+      {
+        ownReasons: [
+          { id: "r1", name: "Staff purchase", shopifyReason: "other" },
+        ],
+      },
+      {
+        error: "Some lines could not be matched.",
+        values: { ...FORM, reason: "own:r1" },
+      },
+    );
+
+    expect(html).toMatch(/<s-option value="own:r1" selected="[^"]*">/);
+  });
+
+  it("shows an adjustment under the name the merchant gave its reason, with the Shopify reason beside it", () => {
+    const html = render({
+      history: [
+        entry({ reasonLabel: "Sent to photo studio", reason: "other" }),
+      ],
+    });
+
+    expect(html).toContain("Sent to photo studio");
+    expect(html).toContain("In Shopify: Other");
+    // A built-in reason needs no second name.
+    expect(render({ history: [entry()] })).not.toContain("In Shopify:");
   });
 
   it("explains what to do when the shop has no locations instead of showing a form", () => {
@@ -726,12 +793,42 @@ describe("adjustment report export", () => {
       to: new Date("2026-11-30T23:59:59.999Z"),
     });
     expect((await response.text()).split("\r\n")).toEqual([
-      "Recorded at (UTC),Type,Status,Reason,Location,Staff ID,Item,SKU,Change,Available after,Line result,Shopify message,Note,Adjustment ID,Reverses adjustment ID",
-      "2026-11-11T21:40:05.123Z,Reversal,Applied,Correction,Shop floor,77,Red wine,RED-75,3,10,Applied,,,op-2,op-1",
-      "2026-11-11T21:40:05.123Z,Adjustment,Applied,Damaged,Shop floor,42,Red wine,RED-75,-3,7,Applied,,Dropped a case,op-1,",
-      "2026-11-11T21:40:05.123Z,Adjustment,Applied,Damaged,Shop floor,42,White wine,,4,,Refused by Shopify,The item is not stocked at the location.,Dropped a case,op-1,",
+      "Recorded at (UTC),Type,Status,Reason,Shopify reason,Location,Staff ID,Item,SKU,Change,Available after,Line result,Shopify message,Note,Adjustment ID,Reverses adjustment ID",
+      "2026-11-11T21:40:05.123Z,Reversal,Applied,Correction,Correction,Shop floor,77,Red wine,RED-75,3,10,Applied,,,op-2,op-1",
+      "2026-11-11T21:40:05.123Z,Adjustment,Applied,Damaged,Damaged,Shop floor,42,Red wine,RED-75,-3,7,Applied,,Dropped a case,op-1,",
+      "2026-11-11T21:40:05.123Z,Adjustment,Applied,Damaged,Damaged,Shop floor,42,White wine,,4,,Refused by Shopify,The item is not stocked at the location.,Dropped a case,op-1,",
       "",
     ]);
+  });
+
+  it("writes the merchant's own reason name and the Shopify reason in separate columns", async () => {
+    service.listAdjustmentsForExport.mockResolvedValue({
+      truncated: false,
+      entries: [
+        entry({ reasonLabel: "Sent to photo studio", reason: "other" }),
+      ],
+    });
+
+    const response = (await exportLoader(
+      get("/app/adjustments/export"),
+    )) as Response;
+
+    expect((await response.text()).split("\r\n")[1]).toBe(
+      "2026-11-11T21:40:05.123Z,Adjustment,Applied,Sent to photo studio,Other,Shop floor,42,Red wine,RED-75,-3,7,Applied,,Dropped a case,op-1,",
+    );
+  });
+
+  it("neutralizes a reason name a spreadsheet would run as a formula", async () => {
+    service.listAdjustmentsForExport.mockResolvedValue({
+      truncated: false,
+      entries: [entry({ reasonLabel: "=HYPERLINK(1)", reason: "other" })],
+    });
+
+    const response = (await exportLoader(
+      get("/app/adjustments/export"),
+    )) as Response;
+
+    expect(await response.text()).toContain(",'=HYPERLINK(1),Other,");
   });
 
   it("neutralizes text a spreadsheet would run as a formula", async () => {
@@ -983,7 +1080,7 @@ describe("Adjustment times on the shop's clock", () => {
     );
     expect(head).toMatch(/^Recorded at \(America\/Toronto\),Type,/);
     expect(row).toBe(
-      "2026-11-11 21:30,Adjustment,Applied,Damaged,Shop floor,42,Red wine,RED-75,-3,7,Applied,,Dropped a case,op-1,",
+      "2026-11-11 21:30,Adjustment,Applied,Damaged,Damaged,Shop floor,42,Red wine,RED-75,-3,7,Applied,,Dropped a case,op-1,",
     );
   });
 

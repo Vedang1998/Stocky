@@ -160,7 +160,8 @@ async function assertTargetsBelongToShop(
   }
 }
 
-function isUniqueViolation(err: unknown): boolean {
+/** A unique index refused the write, usually because another request wrote the row first. */
+export function isUniqueViolation(err: unknown): boolean {
   return (
     err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
   );
@@ -225,6 +226,7 @@ async function persist(
           sourceType: draft.source.type,
           sourceId: draft.source.id,
           reason: draft.reason,
+          reasonLabel: draft.reasonLabel,
           quantityName: draft.quantityName,
           referenceDocumentUri: draft.referenceDocumentUri,
           actorShopifyUserId: draft.actor.shopifyUserId,

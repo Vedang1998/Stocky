@@ -15,6 +15,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
 import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
+import { chosen } from "../lib/chosen-option";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
@@ -24,8 +25,10 @@ import {
   MAX_ADJUSTMENT_NOTE_LENGTH,
   MAX_ADJUSTMENT_TEXT_LENGTH,
   adjustmentReasonLabel,
+  ownReasonValue,
   type AdjustmentMode,
 } from "../services/adjustments/adjustment-input";
+import { listOwnAdjustmentReasons } from "../services/adjustments/adjustment-reasons.server";
 import {
   formatAdjustmentCursor,
   readAdjustmentHistoryQuery,
@@ -63,9 +66,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     timeZone,
   );
 
-  const [locations, planActive, entries] = await Promise.all([
+  const [locations, planActive, ownReasons, entries] = await Promise.all([
     fetchLocations(admin),
     planAllowsChanges(db),
+    listOwnAdjustmentReasons(db),
     // One more than a page, to know whether an older page exists.
     listAdjustments(db, {
       from: query.from,
@@ -85,6 +89,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     timeZone,
     writesEnabled: isInventoryWriteEnabled("adjustmentWrites"),
     locations,
+    ownReasons,
     history,
     olderCursor:
       entries.length > ADJUSTMENT_HISTORY_PAGE_SIZE && last
@@ -219,13 +224,6 @@ const LINE_RESULT: Record<InventoryOperationLineStatus, string> = {
   IN_FLIGHT: "Waiting for Shopify to confirm",
 };
 
-/**
- * Marks the option a select starts on. A Polaris select ignores a `value`
- * attribute in server-rendered markup, and picks its first option unless one
- * is marked.
- */
-const chosen = (isChosen: boolean) => (isChosen ? { selected: true } : {});
-
 const signed = (delta: number) => (delta > 0 ? `+${delta}` : String(delta));
 
 function exportHref(filter: { from: string; to: string }): string {
@@ -268,7 +266,9 @@ function HistoryEntry({
       <s-stack direction="block" gap="small">
         <s-stack direction="inline" gap="small" alignItems="center">
           <s-text type="strong">
-            {isReversal ? "Reversal" : adjustmentReasonLabel(entry.reason)}
+            {isReversal
+              ? "Reversal"
+              : (entry.reasonLabel ?? adjustmentReasonLabel(entry.reason))}
           </s-text>
           <s-badge tone={badge.tone}>{badge.label}</s-badge>
           {entry.reversedByOperationId && <s-badge>Reversed</s-badge>}
@@ -277,6 +277,8 @@ function HistoryEntry({
           {formatShopTime(entry.createdAt, timeZone)} ·{" "}
           {locationName(entry.locationId)} ·{" "}
           {entry.staffId ? `Staff ID ${entry.staffId}` : "Staff not recorded"}
+          {entry.reasonLabel &&
+            ` · In Shopify: ${adjustmentReasonLabel(entry.reason)}`}
         </s-text>
         {entry.note && <s-paragraph>{entry.note}</s-paragraph>}
 
@@ -388,6 +390,7 @@ export default function Adjustments() {
     timeZone,
     writesEnabled,
     locations,
+    ownReasons,
     history,
     olderCursor,
     filter,
@@ -453,6 +456,15 @@ export default function Adjustments() {
                       {reason.label}
                     </s-option>
                   ))}
+                  {ownReasons.map((reason) => (
+                    <s-option
+                      key={reason.id}
+                      value={ownReasonValue(reason.id)}
+                      {...chosen(ownReasonValue(reason.id) === values.reason)}
+                    >
+                      {reason.name}
+                    </s-option>
+                  ))}
                 </s-select>
                 <s-select label="Quantities below" name="mode" required>
                   {ADJUSTMENT_MODES.map((mode) => (
@@ -497,6 +509,12 @@ export default function Adjustments() {
                   in Shopify while the adjustment is being applied.
                 </s-text>
               </s-stack>
+              <s-text color="subdued">
+                Need a reason that is not in the list?{" "}
+                <s-link href="/app/adjustments/reasons">
+                  Add your own reasons
+                </s-link>
+              </s-text>
             </s-stack>
           </Form>
         )}

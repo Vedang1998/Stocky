@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { issueTenantAuthority } from "../authority.server";
 import { TenantAccessError, TenantAuthorityError } from "../errors";
 import {
+  ADJUSTMENT_REASON_DIRECT_MERCHANT_MODELS,
   CHILD_MERCHANT_MODELS,
   DIRECT_MERCHANT_MODELS,
   INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS,
@@ -112,7 +113,8 @@ describe("tenant-bound database contract (PR 2)", () => {
         PURCHASING_DIRECT_MERCHANT_MODELS.length +
         REPLENISHMENT_DIRECT_MERCHANT_MODELS.length +
         STOCK_HISTORY_DIRECT_MERCHANT_MODELS.length +
-        STOCKTAKE_HISTORY_DIRECT_MERCHANT_MODELS.length,
+        STOCKTAKE_HISTORY_DIRECT_MERCHANT_MODELS.length +
+        ADJUSTMENT_REASON_DIRECT_MERCHANT_MODELS.length,
     );
     expect(CHILD_MERCHANT_MODELS).toHaveLength(
       PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT + PR6_A_CHILD_MERCHANT_MODELS.length,

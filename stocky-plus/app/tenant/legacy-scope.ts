@@ -73,6 +73,7 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   DailyStockSnapshot: "DailyStockSnapshot",
   DailyStockLevel: "DailyStockLevel",
   StocktakeRecountEvent: "StocktakeRecountEvent",
+  AdjustmentReason: "AdjustmentReason",
 };
 
 /** Direct models without a legacy `shop` column — shopId-only scope. */
@@ -102,6 +103,7 @@ export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "DailyStockSnapshot",
   "DailyStockLevel",
   "StocktakeRecountEvent",
+  "AdjustmentReason",
 ]);
 
 /**
